@@ -14,7 +14,6 @@ var migrations []string = []string{
 	`
 		CREATE TABLE IF NOT EXISTS "images" (
 			"id"	INTEGER NOT NULL,
-			"url"	TEXT,
 			"extension"	TEXT,
 			"filename"	TEXT,
 			"path"	TEXT,
