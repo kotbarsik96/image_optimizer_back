@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image_optimizer/imgopt_db"
 	"image_optimizer/imgopt_s3"
 	"mime/multipart"
 	"path/filepath"
@@ -12,14 +13,14 @@ import (
 )
 
 type TImageEntity struct {
-	TFile
-	Width      int    `json:"width"`
-	Height     int    `json:"height"`
-	Created_at string `json:"created_at"`
-	Updated_at string `json:"updated_at"`
+	TFileEntity
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
-func NewImageEntity(imgFileheader *multipart.FileHeader, url, path string) (TImageEntity, error) {
+func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, filename string) (TImageEntity, error) {
 	currentTime := utils.GetCurrentFormattedTime()
 
 	extension := filepath.Ext(imgFileheader.Filename)[1:]
@@ -28,24 +29,34 @@ func NewImageEntity(imgFileheader *multipart.FileHeader, url, path string) (TIma
 
 	imgConfig, _, _ := image.DecodeConfig(bufio.NewReader(file))
 
-	fname := filepath.Base(path)
-	fpath := filepath.Dir(path)
-
 	entity := TImageEntity{
-		TFile: TFile{
-			Url:        url,
+		TFileEntity: TFileEntity{
+			FolderId:   folder.Id,
 			Extension:  extension,
-			Filename:   strings.Split(fname, ".")[0],
-			Path:       fpath,
+			Filename:   strings.Split(filename, ".")[0],
 			Size_bytes: int(imgFileheader.Size),
 		},
-		Width:      imgConfig.Width,
-		Height:     imgConfig.Height,
-		Created_at: currentTime,
-		Updated_at: currentTime,
+		Width:     imgConfig.Width,
+		Height:    imgConfig.Height,
+		CreatedAt: currentTime,
+		UpdatedAt: currentTime,
 	}
 
+	file.Close()
+
 	return entity, err
+}
+
+func (img *TImageEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
+	return row.Scan(&img.Id,
+		&img.FolderId,
+		&img.Extension,
+		&img.Filename,
+		&img.Size_bytes,
+		&img.Width,
+		&img.Height,
+		&img.CreatedAt,
+		&img.UpdatedAt)
 }
 
 func (img *TImageEntity) Save() error {
@@ -56,47 +67,46 @@ func (img *TImageEntity) Save() error {
 
 func GetImageEntity(id int) (TImageEntity, error) {
 	entity := TImageEntity{}
-	stmt := dbwrapper.DB.QueryRow("SELECT * FROM images WHERE id = ?", id)
-	err := stmt.Scan(
-		&entity.Id,
-		&entity.Url,
-		&entity.Extension,
-		&entity.Filename,
-		&entity.Path,
-		&entity.Size_bytes,
-		&entity.Width,
-		&entity.Height,
-		&entity.Created_at,
-		&entity.Updated_at)
+	row := dbwrapper.DB.QueryRow("SELECT * FROM images WHERE id = ?", id)
+	err := entity.ScanFullRow(row)
 	return entity, err
 }
 
+func (img *TImageEntity) GetFolder() (TFolderEntity, error) {
+	folder := TFolderEntity{}
+
+	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE id = ?", img.FolderId)
+	err := folder.ScanFullRow(row)
+
+	return folder, err
+}
+
 func (img *TImageEntity) GetProject() (TProjectEntity, error) {
-	var projectId int
-	stmt := dbwrapper.DB.QueryRow("SELECT project_id FROM projects_images WHERE image_id = ?", img.Id)
-	err := stmt.Scan(&projectId)
-	if err != nil {
-		fmt.Printf("Could not get project id related to img %v: %v\n", img.Id, err)
-		return TProjectEntity{}, err
-	}
+	project := TProjectEntity{}
 
-	project, err := GetProjectEntity(projectId)
-	if err != nil {
-		fmt.Printf("Could not get project entity related to img %v: %v\n", img.Id, err)
-		return project, err
-	}
+	row := dbwrapper.DB.QueryRow(`
+		SELECT * FROM projects WHERE id = (
+			SELECT project_id FROM projects_folders WHERE folder_id = ?
+		)
+	`, img.FolderId)
 
-	return project, nil
+	err := project.ScanFullRow(row)
+
+	return project, err
 }
 
 func (img *TImageEntity) GetUploader() (TUploaderEntity, error) {
-	project, err := img.GetProject()
-	if err != nil {
-		fmt.Printf("Could not get uploader entity related to img %v: %v\n", img.Id, err)
-		return TUploaderEntity{}, err
-	}
+	uploader := TUploaderEntity{}
 
-	return project.GetUploader()
+	row := dbwrapper.DB.QueryRow(`
+		SELECT * FROM uploaders WHERE id = (
+			SELECT uploader_id FROM folders WHERE id = ?
+		)
+	`, img.FolderId)
+
+	err := uploader.ScanFullRow(row)
+
+	return uploader, err
 }
 
 func (img *TImageEntity) GetUrl() string {
@@ -107,7 +117,12 @@ func (img *TImageEntity) GetUrl() string {
 		return ""
 	}
 
-	ipath := "/" + img.Path
+	folder, err := img.GetFolder()
+	if err != nil {
+		return ""
+	}
+
+	ipath := "/" + folder.Path
 	if ipath == "/." {
 		ipath = ""
 	}
@@ -115,10 +130,20 @@ func (img *TImageEntity) GetUrl() string {
 	return bucket.GetFileUrl(uploader.Uuid, path)
 }
 
-func UploadProjectImages(project TProjectEntity, uploader TUploaderEntity, images []*multipart.FileHeader) map[string]TUploadData {
+type TUploadData struct {
+	Err   error        `json:"error"`
+	Image TImageEntity `json:"image"`
+	Url   string       `json:"url"`
+}
+
+func UploadProjectImages(
+	uploader TUploaderEntity,
+	folder TFolderEntity,
+	images []*multipart.FileHeader,
+) []TUploadData {
 	var bucket imgopt_s3.BucketBasis
 
-	responseData := make(map[string]TUploadData)
+	responseData := []TUploadData{}
 
 	for _, img := range images {
 		data := TUploadData{}
@@ -129,27 +154,27 @@ func UploadProjectImages(project TProjectEntity, uploader TUploaderEntity, image
 			continue
 		}
 
-		path := img.Filename
+		fullpath := filepath.Join(folder.Path, img.Filename)
 
 		extension := filepath.Ext(img.Filename)[1:]
-		_, err = bucket.UploadFile(context.TODO(), uploader.Uuid, path, file, "image/"+extension)
+		_, err = bucket.UploadFile(context.TODO(), uploader.Uuid, fullpath, file, "image/"+extension)
 		file.Close()
 
-		data.Url = bucket.GetFileUrl(uploader.Uuid, path)
-
 		if err == nil {
-			dbimg, err := NewImageEntity(img, data.Url, path)
-			err = dbimg.Save()
+			imgEntity, err := NewImageEntity(img, folder, img.Filename)
+			err = imgEntity.Save()
 			if err != nil {
 				data.Err = err
+			} else {
+				data.Url = imgEntity.GetUrl()
 			}
 
-			// присваивание изображения к проекту
-			stmt, _ := dbwrapper.DB.Prepare("INSERT INTO projects_images VALUES(?, ?)")
-			stmt.Exec(project.Id, dbimg.Id)
+			data.Image = imgEntity
+		} else {
+			data.Err = err
 		}
 
-		responseData[img.Filename] = data
+		responseData = append(responseData, data)
 	}
 
 	return responseData

@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+// [*sql.Rows], [*sql.Row]
+type DatabaseRow interface {
+	Scan(dest ...any) error
+}
+
+type DatabaseEntity interface {
+	ScanFullRow(row DatabaseRow) error
+}
+
 // сохраняет entity в базе данных:
 // если entity.Id == 0, то использует INSERT, иначе использует UPDATE по entity.Id (обновляет все поля)
 // entity обязательно должна быть struct'ом и иметь первым полем  Id int `json:"id"`
@@ -38,6 +47,10 @@ func (dw *DatabaseWrapper) SaveEntity(table string, entity any) (int, error) {
 		}
 
 		r, err := stmt.Exec(valuesWithoutId...)
+		if err != nil {
+			return 0, err
+		}
+
 		insertedId, _ := r.LastInsertId()
 
 		return int(insertedId), err
@@ -58,7 +71,7 @@ func (dw *DatabaseWrapper) SaveEntity(table string, entity any) (int, error) {
 	args = append(args, entityId)
 
 	r, err := stmt.Exec(args...)
-	insertedId, _ := r.LastInsertId()
+	insertedId, err := r.LastInsertId()
 
 	return int(insertedId), err
 }

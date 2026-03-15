@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image_optimizer/imgopt_db"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,10 @@ import (
 type TUploaderEntity struct {
 	Id   int    `json:"id"`
 	Uuid string `json:"uuid"`
+}
+
+func (uploader *TUploaderEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
+	return row.Scan(&uploader.Id, &uploader.Uuid)
 }
 
 func NewUploaderEntity(c *gin.Context) (TUploaderEntity, error) {

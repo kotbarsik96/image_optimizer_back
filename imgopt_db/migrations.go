@@ -10,19 +10,33 @@ var migrations []string = []string{
 		);
 	`,
 
+	// folders
+	`
+		CREATE TABLE IF NOT EXISTS "folders" (
+			"id"	INTEGER NOT NULL,
+			"uploader_id" INTEGER,
+			"path"	TEXT,
+			"created_at" TEXT,
+			"updated_at" TEXT,
+			PRIMARY KEY("id"),
+			FOREIGN KEY ("uploader_id") REFERENCES "uploaders"("id") ON DELETE CASCADE ON UPDATE CASCADE
+		);
+	`,
+
 	// images
 	`
 		CREATE TABLE IF NOT EXISTS "images" (
 			"id"	INTEGER NOT NULL,
+			"folder_id"	INTEGER,
 			"extension"	TEXT,
 			"filename"	TEXT,
-			"path"	TEXT,
 			"size_bytes"	INTEGER,
 			"width"	INTEGER,
 			"height"	INTEGER,
 			"created_at"	TEXT,
 			"updated_at"	TEXT,
-			PRIMARY KEY("id")
+			PRIMARY KEY("id"),
+			FOREIGN KEY("folder_id") REFERENCES "folders"("id") ON DELETE CASCADE ON UPDATE CASCADE
 		);
 	`,
 
@@ -39,12 +53,13 @@ var migrations []string = []string{
 		);
 	`,
 
-	// projects_images
+	// projects_folders
 	`
-		CREATE TABLE IF NOT EXISTS "projects_images" (
+		CREATE TABLE IF NOT EXISTS "projects_folders" (
 			"project_id"	INTEGER,
-			"image_id"	INTEGER,
+			"folder_id"	INTEGER,
 			FOREIGN KEY("project_id") REFERENCES "projects"("id") ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY("folder_id") REFERENCES "folders"("id") ON UPDATE CASCADE ON DELETE CASCADE
 		);
 	`,
 
@@ -62,19 +77,13 @@ var migrations []string = []string{
 		);
 	`,
 
-	// optimized_images
+	// optimizations_folders
 	`
-		CREATE TABLE IF NOT EXISTS "optimized_images" (
-			"id"	INTEGER NOT NULL,
+		CREATE TABLE IF NOT EXISTS "optimizations_folders" (
 			"optimization_id"	INTEGER,
-			"image_id"	INTEGER,
-			"original_image_id"	INTEGER,
-			"created_at"	TEXT,
-			"updated_at"	TEXT,
-			PRIMARY KEY("id"),
-			FOREIGN KEY("image_id") REFERENCES "images"("id") ON UPDATE CASCADE ON DELETE CASCADE,
-			FOREIGN KEY("optimization_id") REFERENCES "optimizations"("id") ON UPDATE CASCADE ON DELETE CASCADE,
-			FOREIGN KEY("original_image_id") REFERENCES "images"("id") ON UPDATE CASCADE ON DELETE CASCADE
+			"folder_id"	INTEGER,
+			FOREIGN KEY("optimization_id") REFERENCES "optimizations"("id") ON UPDATE CASCADE ON DELETE CASCADE
+			FOREIGN KEY("folder_id") REFERENCES "folders"("id") ON UPDATE CASCADE ON DELETE CASCADE
 		);
 	`,
 }

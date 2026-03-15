@@ -10,6 +10,13 @@ const (
 	SVG
 )
 
+type ProjectEnvMode int
+
+const (
+	ENVMODE_DEV ProjectEnvMode = iota
+	ENVMODE_PROD
+)
+
 type FileKind int
 
 const (
