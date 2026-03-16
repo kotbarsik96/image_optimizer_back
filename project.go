@@ -125,65 +125,86 @@ func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {
 		}
 	}
 
-	folders = OrganizeFolders(folders)
+	return OrganizeFolders(folders), nil
+}
 
-	return folders, nil
+func GetFolderDepth(f string) int {
+	if f == "." {
+		return 0
+	}
+
+	return len(strings.Split(f, "/"))
 }
 
 func OrganizeFolders(folders []TFolder) []TFolder {
-	organized := []TFolder{}
+	if len(folders) < 1 {
+		return nil
+	}
 
-	var hasRoot bool
-	for _, f := range folders {
+	flat := make([]TFolder, len(folders))
+	copy(flat, folders)
+
+	// сортировка: "." - всегда с индексом 0
+	// дальше по иерархии: папки верхнего уровня с меньшим индексом, вложенные папки - с большим
+	slices.SortStableFunc(flat, func(a, b TFolder) int {
+		da, db := GetFolderDepth(a.Path), GetFolderDepth(b.Path)
+		if da != db {
+			return da - db
+		}
+
+		return strings.Compare(a.Path, b.Path)
+	})
+
+	// flat, перенесённый в map, где ключами выступают [TFolder.Path]
+	nodes := make(map[string]TFolder, len(flat))
+	// ключ - [TFolder.Path] верхнего уровня, значение - список непосредственно вложенных [TFolder.Path]
+	children := make(map[string][]string, len(flat))
+	// список корневых [TFolder.Path], непосредственные потомки "."
+	roots := make([]string, 0, len(flat))
+
+	// наполнение [nodes]
+	for _, f := range flat {
+		nodes[f.Path] = f
+	}
+
+	// наполнение [children] и [roots]
+	for _, f := range flat {
 		if f.Path == "." {
-			hasRoot = true
-			break
+			continue
+		}
+
+		parentPath := path.Dir(f.Path)
+		if _, ok := nodes[parentPath]; ok && parentPath != "." {
+			children[parentPath] = append(children[parentPath], f.Path)
+		} else {
+			roots = append(roots, f.Path)
 		}
 	}
 
-	if hasRoot {
-		slices.SortFunc(folders, func(a, b TFolder) int {
-			if a.Path == "." {
-				return -1
-			}
-			if b.Path == "." {
-				return 1
-			}
-
-			len1 := len(strings.Split(a.Path, "/"))
-			len2 := len(strings.Split(b.Path, "/"))
-			return len1 - len2
-		})
-
-		for i, f := range folders {
-			if f.Path == "." {
-				if i == 0 {
-					break
-				}
-
-				folders[0], folders[i] = folders[i], folders[0]
-			}
+	// на основе пути [p], получить [nodes[p]] и рекурсивно заполнить вложенные папки [nodes[p].Folders]
+	var build func(p string) TFolder
+	build = func(p string) TFolder {
+		node := nodes[p]
+		node.Folders = make([]TFolder, 0, len(children[p]))
+		for _, c := range children[p] {
+			node.Folders = append(node.Folders, build(c))
 		}
-
-		folders[0].Folders = OrganizeFolders(folders[1:])
-
-		organized = append(organized, folders[0])
-	} else {
-		for i := len(folders) - 1; i > 0; i-- {
-		l:
-			for j := 0; j < i; j++ {
-				isParent := folders[j].Path == path.Dir(folders[i].Path)
-				if isParent {
-					folders[j].Folders = append(folders[j].Folders, folders[i])
-					folders = slices.Delete(folders, i, i+1)
-					break l
-				}
-			}
-		}
-		organized = folders
+		return node
 	}
 
-	return organized
+	if _, ok := nodes["."]; ok {
+		r := build(".")
+		for _, rootPath := range roots {
+			r.Folders = append(r.Folders, build(rootPath))
+		}
+		return []TFolder{r}
+	}
+
+	out := make([]TFolder, 0, len(roots))
+	for _, rootPath := range roots {
+		out = append(out, build(rootPath))
+	}
+	return out
 }
 
 // краткая информация о проекте (используется в списках)
