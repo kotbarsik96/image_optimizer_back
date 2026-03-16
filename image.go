@@ -122,11 +122,11 @@ func (img *TImageEntity) GetUrl() string {
 		return ""
 	}
 
-	ipath := folder.Path
-	if ipath == "." {
+	ipath := folder.Path + "/"
+	if ipath == "./" {
 		ipath = ""
 	}
-	path := fmt.Sprintf("%v/%v.%v", ipath, img.Filename, img.Extension)
+	path := fmt.Sprintf("%v%v.%v", ipath, img.Filename, img.Extension)
 	return bucket.GetFileUrl(uploader.Uuid, path)
 }
 
