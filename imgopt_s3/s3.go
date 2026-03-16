@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -82,7 +83,7 @@ func (bb *BucketBasis) GetFilePath(uploaderUuid string, path string) string {
 }
 
 func (bb *BucketBasis) GetFileUrl(uploaderUuid string, path string) string {
-	path = filepath.ToSlash(path)
+	path = url.PathEscape(filepath.ToSlash(path))
 
 	return fmt.Sprintf("%v/%v/%v",
 		os.Getenv("S3_ENDPOINT_URL"),
