@@ -155,35 +155,43 @@ func RouteUploadFiles(c *gin.Context) {
 }
 
 func RouteGetProject(c *gin.Context) {
-	// uploader := GetCurrentUploader(c)
+	uploader := GetCurrentUploader(c)
 
-	// idParam := c.Param("id")
-	// id, convErr := strconv.Atoi(idParam)
-	// project, err := GetProjectEntity(id)
-	// if err != nil || convErr != nil {
-	// 	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-	// 		"error": "Project not found",
-	// 	})
-	// 	return
-	// }
-
-	// if project.UploaderId != uploader.Id {
-	// 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-	// 		"error": "Unauthorized",
-	// 	})
-	// 	return
-	// }
-
-	project, err := GetProjectEntity(1)
-
-	if err == nil {
-		tree, err := project.GetFoldersTree()
-		if err == nil {
-			c.JSON(200, tree)
-		} else {
-			fmt.Println(err)
-		}
-	} else {
-		fmt.Println(err)
+	idParam := c.Param("id")
+	id, convErr := strconv.Atoi(idParam)
+	project, err := GetProjectEntity(id)
+	if err != nil || convErr != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "Project not found",
+		})
+		return
 	}
+
+	if project.UploaderId != uploader.Id {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	project, err = GetProjectEntity(1)
+
+	tree, err := project.GetFoldersTree()
+	if err != nil {
+		text := "Could not get project"
+		textFull := fmt.Sprintf("%v: %v", text, err)
+
+		utils.AbortWithError(
+			c,
+			http.StatusInternalServerError,
+			text,
+			textFull,
+			nil,
+		)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": tree,
+	})
 }
