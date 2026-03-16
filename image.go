@@ -8,7 +8,7 @@ import (
 	"image_optimizer/imgopt_db"
 	"image_optimizer/imgopt_s3"
 	"mime/multipart"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -23,7 +23,7 @@ type TImageEntity struct {
 func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, filename string) (TImageEntity, error) {
 	currentTime := utils.GetCurrentFormattedTime()
 
-	extension := filepath.Ext(imgFileheader.Filename)[1:]
+	extension := path.Ext(imgFileheader.Filename)[1:]
 
 	file, err := imgFileheader.Open()
 
@@ -31,10 +31,10 @@ func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, f
 
 	entity := TImageEntity{
 		TFileEntity: TFileEntity{
-			FolderId:   folder.Id,
-			Extension:  extension,
-			Filename:   strings.Split(filename, ".")[0],
-			Size_bytes: int(imgFileheader.Size),
+			FolderId:  folder.Id,
+			Extension: extension,
+			Filename:  strings.Split(filename, ".")[0],
+			SizeBytes: int(imgFileheader.Size),
 		},
 		Width:     imgConfig.Width,
 		Height:    imgConfig.Height,
@@ -52,7 +52,7 @@ func (img *TImageEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
 		&img.FolderId,
 		&img.Extension,
 		&img.Filename,
-		&img.Size_bytes,
+		&img.SizeBytes,
 		&img.Width,
 		&img.Height,
 		&img.CreatedAt,
@@ -154,9 +154,9 @@ func UploadProjectImages(
 			continue
 		}
 
-		fullpath := filepath.Join(folder.Path, img.Filename)
+		fullpath := path.Join(folder.Path, img.Filename)
 
-		extension := filepath.Ext(img.Filename)[1:]
+		extension := path.Ext(img.Filename)[1:]
 		_, err = bucket.UploadFile(context.TODO(), uploader.Uuid, fullpath, file, "image/"+extension)
 		file.Close()
 

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"path/filepath"
+	"path"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -42,8 +42,7 @@ func RouteNewProject(c *gin.Context) {
 	}
 
 	// связать папку с проектом
-	stmt, _ := dbwrapper.DB.Prepare("INSERT INTO projects_folders VALUES(?, ?)")
-	stmt.Exec(project.Id, folder.Id)
+	folder.SaveToProject(project.Id)
 
 	// загрузка изображений на s3 и сохранение в базу данных; изображение будет связано с папкой
 	form, _ := c.MultipartForm()
@@ -96,7 +95,7 @@ func RouteCreateFolder(c *gin.Context) {
 		return
 	}
 
-	newFolderPath := filepath.Join(parentFolder.Path, folderName)
+	newFolderPath := path.Join(parentFolder.Path, folderName)
 
 	existingFolder := TFolderEntity{}
 	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE path = ? AND uploader_id = ?", newFolderPath, uploader.Id)
@@ -120,6 +119,8 @@ func RouteCreateFolder(c *gin.Context) {
 			nil)
 		return
 	}
+
+	newFolder.SaveToProject(project.Id)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"folder": newFolder,
@@ -156,37 +157,33 @@ func RouteUploadFiles(c *gin.Context) {
 func RouteGetProject(c *gin.Context) {
 	// uploader := GetCurrentUploader(c)
 
-	// // получить id проекта из запроса
 	// idParam := c.Param("id")
-	// id, err := strconv.Atoi(idParam)
-	// if err != nil {
-	// 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-	// 		"error": fmt.Sprintf("Invalid parameter id in request: %v", idParam),
-	// 	})
-	// 	return
-	// }
-
-	// // получить проект
+	// id, convErr := strconv.Atoi(idParam)
 	// project, err := GetProjectEntity(id)
-	// if err != nil {
-	// 	text := "Project not found"
-	// 	fulltext := fmt.Sprintf("%v: %v", text, err)
-	// 	utils.AbortWithError(
-	// 		c,
-	// 		http.StatusNotFound,
-	// 		text,
-	// 		fulltext,
-	// 		nil,
-	// 	)
-	// 	return
-	// }
-
-	// // пользователь может смотреть только свои проекты
-	// if uploader.Id != project.UploaderId {
+	// if err != nil || convErr != nil {
 	// 	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 	// 		"error": "Project not found",
 	// 	})
 	// 	return
 	// }
 
+	// if project.UploaderId != uploader.Id {
+	// 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+	// 		"error": "Unauthorized",
+	// 	})
+	// 	return
+	// }
+
+	project, err := GetProjectEntity(1)
+
+	if err == nil {
+		tree, err := project.GetFoldersTree()
+		if err == nil {
+			c.JSON(200, tree)
+		} else {
+			fmt.Println(err)
+		}
+	} else {
+		fmt.Println(err)
+	}
 }

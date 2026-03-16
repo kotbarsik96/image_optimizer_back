@@ -6,7 +6,6 @@ import (
 	"mime/multipart"
 	"net/url"
 	"os"
-	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -56,8 +55,6 @@ func (bb *BucketBasis) GetClient() (*s3.Client, error) {
 }
 
 func (bb *BucketBasis) UploadFile(ctx context.Context, uploaderUuid, path string, file multipart.File, contentType string) (*s3.PutObjectOutput, error) {
-	path = filepath.ToSlash(path)
-
 	client, err := bb.GetClient()
 	if err != nil {
 		return nil, err
@@ -74,20 +71,18 @@ func (bb *BucketBasis) UploadFile(ctx context.Context, uploaderUuid, path string
 }
 
 func (bb *BucketBasis) GetFilePath(uploaderUuid string, path string) string {
-	path = filepath.ToSlash(path)
-
 	return fmt.Sprintf("%v/%v/%v",
 		os.Getenv("PROJECT_NAME"),
 		uploaderUuid,
 		path)
 }
 
-func (bb *BucketBasis) GetFileUrl(uploaderUuid string, path string) string {
-	path = url.PathEscape(filepath.ToSlash(path))
+func (bb *BucketBasis) GetFileUrl(uploaderUuid string, p string) string {
+	escapedPath := url.PathEscape(p)
 
 	return fmt.Sprintf("%v/%v/%v",
 		os.Getenv("S3_ENDPOINT_URL"),
 		os.Getenv("S3_BUCKET"),
-		bb.GetFilePath(uploaderUuid, path),
+		bb.GetFilePath(uploaderUuid, escapedPath),
 	)
 }

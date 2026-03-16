@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	_ "image/jpeg"
 	_ "image/png"
 	"image_optimizer/imgopt_db"
@@ -21,8 +22,10 @@ type TFolderEntity struct {
 }
 
 type TFolder struct {
-	folders []TFolder
-	images  []TImageEntity
+	Id      int            `json:"id"`
+	Path    string         `json:"path"`
+	Folders []TFolder      `json:"folders"`
+	Images  []TImageEntity `json:"images"`
 }
 
 func NewFolderEntity(uploaderId int, path string) TFolderEntity {
@@ -90,6 +93,19 @@ func (folder *TFolderEntity) GetUploader() (TUploaderEntity, error) {
 	return uploader, err
 }
 
+func (folder *TFolderEntity) SaveToProject(projectId int) error {
+	var id int
+	row := dbwrapper.DB.QueryRow("SELECT folder_id FROM projects_folders WHERE folder_id = ?", folder.Id)
+	err := row.Scan(&id)
+	if err == nil {
+		return fmt.Errorf("Folder %v already saved to project %v", folder.Id, projectId)
+	}
+
+	stmt, err := dbwrapper.DB.Prepare("INSERT INTO projects_folders VALUES(?, ?)")
+	stmt.Exec(projectId, folder.Id)
+	return err
+}
+
 func IsAcceptableFolderName(name string) bool {
 	if !foldernameRegExp.MatchString(name) {
 		return false
@@ -120,9 +136,9 @@ func IsAcceptableFolderName(name string) bool {
 
 // файл с общей информацией
 type TFileEntity struct {
-	Id         int    `json:"id"`
-	FolderId   int    `json:"folder_id"`
-	Extension  string `json:"extension"`
-	Filename   string `json:"filename"`
-	Size_bytes int    `json:"size_bytes"`
+	Id        int    `json:"id"`
+	FolderId  int    `json:"folder_id"`
+	Extension string `json:"extension"`
+	Filename  string `json:"filename"`
+	SizeBytes int    `json:"size_bytes"`
 }
