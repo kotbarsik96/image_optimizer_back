@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -22,7 +23,7 @@ func (_ Utils) GetCurrentFormattedTime() string {
 	return time.Now().Format(time.DateTime)
 }
 
-func (_ Utils) GetProjectEnvMode() ProjectEnvMode {
+func (_ Utils) GetEnvMode() ProjectEnvMode {
 	v := os.Getenv("DEV")
 	if v == "1" {
 		return ENVMODE_DEV
@@ -30,21 +31,22 @@ func (_ Utils) GetProjectEnvMode() ProjectEnvMode {
 	return ENVMODE_PROD
 }
 
-func (u Utils) AbortWithError(c *gin.Context, code int, safeErrorText, fullErrorText string, jsonObj map[string]any) {
-	mode := u.GetProjectEnvMode()
+func (u Utils) AbortWithError(c *gin.Context, code int, text string, err error, jsonObjects ...map[string]any) {
+	mode := u.GetEnvMode()
 
-	if jsonObj == nil {
-		jsonObj = make(map[string]any)
+	jsonObj := make(map[string]any)
+	for _, jo := range jsonObjects {
+		maps.Copy(jsonObj, jo)
 	}
 
 	switch mode {
 	case ENVMODE_PROD:
 		maps.Copy(jsonObj, gin.H{
-			"error": safeErrorText,
+			"error": text,
 		})
 	case ENVMODE_DEV:
 		maps.Copy(jsonObj, gin.H{
-			"error": fullErrorText,
+			"error": fmt.Sprintf("%v: %v", text, err),
 		})
 	}
 

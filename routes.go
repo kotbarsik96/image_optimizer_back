@@ -9,6 +9,98 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func RouteGetProjectsList(c *gin.Context) {
+	uploader := GetCurrentUploader(c)
+
+	projects := []TProjectPreview{}
+
+	rows, err := dbwrapper.DB.Query(`
+		SELECT id, title, created_at, updated_at 
+		FROM projects
+		WHERE uploader_id = ?
+	`, uploader.Id)
+	if err != nil {
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not get projects", err)
+		return
+	}
+
+	for rows.Next() {
+		project := TProjectPreview{
+			Optimizations: []TOptimizationPreview{},
+		}
+		err := rows.Scan(&project.Id, &project.Title, &project.CreatedAt, &project.UpdatedAt)
+		if err != nil {
+			utils.AbortWithError(c, http.StatusInternalServerError, "Error while trying to get project", err)
+			return
+		}
+
+		oRows, err := dbwrapper.DB.Query(`
+			SELECT id, output_extension, created_at, updated_at
+			FROM optimizations
+			WHERE project_id = ?
+		`, project.Id)
+		if err != nil {
+			utils.AbortWithError(c, http.StatusInternalServerError, fmt.Sprintf("Could not get optimizations for project %v", project.Id), err)
+			return
+		}
+
+		for oRows.Next() {
+			opt := TOptimizationPreview{}
+			err := oRows.Scan(&opt.Id, &opt.OutputExtension, &opt.CreatedAt, &opt.UpdatedAt)
+			if err != nil {
+				utils.AbortWithError(
+					c,
+					http.StatusInternalServerError,
+					fmt.Sprintf("Error while trying to get optimization for project %v", project.Id),
+					err,
+				)
+				return
+			}
+
+			project.Optimizations = append(project.Optimizations, opt)
+		}
+
+		projects = append(projects, project)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": projects,
+	})
+}
+
+func RouteGetProject(c *gin.Context) {
+	uploader := GetCurrentUploader(c)
+
+	idParam := c.Param("id")
+	id, convErr := strconv.Atoi(idParam)
+	project, err := GetProjectEntity(id)
+	if err != nil || convErr != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "Project not found",
+		})
+		return
+	}
+
+	if project.UploaderId != uploader.Id {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	project, err = GetProjectEntity(1)
+
+	tree, err := project.GetFoldersTree()
+	if err != nil {
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not get project", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": tree,
+	})
+}
+
 func RouteNewProject(c *gin.Context) {
 	// получение текущего пользователя, создающего проект
 	uploader := GetCurrentUploader(c)
@@ -17,13 +109,7 @@ func RouteNewProject(c *gin.Context) {
 	project := NewProjectEntity(uploader, c.PostForm("title"))
 	_, err := project.Save()
 	if err != nil {
-		text := "Could not save project"
-		utils.AbortWithError(
-			c,
-			http.StatusInternalServerError,
-			text,
-			fmt.Sprintf("%v \"%v\": %v", text, project.Title, err),
-			nil)
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save project", err)
 		return
 	}
 
@@ -31,13 +117,7 @@ func RouteNewProject(c *gin.Context) {
 	folder := NewFolderEntity(uploader.Id, ".")
 	err = folder.Save()
 	if err != nil {
-		text := "Could not save folder"
-		fullText := fmt.Sprintf("%v: %v", text, err)
-		utils.AbortWithError(c,
-			http.StatusInternalServerError,
-			text,
-			fullText,
-			nil)
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save folder", err)
 		return
 	}
 
@@ -53,21 +133,13 @@ func RouteNewProject(c *gin.Context) {
 	c.JSON(http.StatusCreated, responseData)
 }
 
-func RouteCreateFolder(c *gin.Context) {
+func RouteNewFolder(c *gin.Context) {
 	uploader := GetCurrentUploader(c)
 
 	projectId, convErr := strconv.Atoi(c.Param("id"))
 	project, err := GetProjectEntity(projectId)
 	if err != nil || convErr != nil {
-		text := "Project not found"
-		textFull := fmt.Sprintf("%v: %v", text, err)
-		utils.AbortWithError(
-			c,
-			http.StatusNotFound,
-			text,
-			textFull,
-			nil,
-		)
+		utils.AbortWithError(c, http.StatusNotFound, "Project not found", err)
 		return
 	}
 
@@ -110,13 +182,7 @@ func RouteCreateFolder(c *gin.Context) {
 	newFolder := NewFolderEntity(uploader.Id, newFolderPath)
 	err = newFolder.Save()
 	if err != nil {
-		text := "Could not save folder"
-		textFull := fmt.Sprintf("%v: %v", text, err)
-		utils.AbortWithError(c,
-			http.StatusInternalServerError,
-			text,
-			textFull,
-			nil)
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save folder", err)
 		return
 	}
 
@@ -152,46 +218,4 @@ func RouteUploadFiles(c *gin.Context) {
 	responseData := UploadProjectImages(uploader, folder, images)
 
 	c.JSON(http.StatusCreated, responseData)
-}
-
-func RouteGetProject(c *gin.Context) {
-	uploader := GetCurrentUploader(c)
-
-	idParam := c.Param("id")
-	id, convErr := strconv.Atoi(idParam)
-	project, err := GetProjectEntity(id)
-	if err != nil || convErr != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "Project not found",
-		})
-		return
-	}
-
-	if project.UploaderId != uploader.Id {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized",
-		})
-		return
-	}
-
-	project, err = GetProjectEntity(1)
-
-	tree, err := project.GetFoldersTree()
-	if err != nil {
-		text := "Could not get project"
-		textFull := fmt.Sprintf("%v: %v", text, err)
-
-		utils.AbortWithError(
-			c,
-			http.StatusInternalServerError,
-			text,
-			textFull,
-			nil,
-		)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": tree,
-	})
 }

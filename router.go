@@ -28,10 +28,12 @@ func NewRouterWrapper() RouterWrapper {
 func (rw *RouterWrapper) Up() {
 	router := rw.router
 
-	router.POST("/project/new", RouteNewProject)
-	router.POST("/project/:id/create-folder", RouteCreateFolder)
-	router.POST("/folder/:id/upload", RouteUploadFiles)
+	router.GET("/projects", RouteGetProjectsList)
 	router.GET("/project/:id", RouteGetProject)
+
+	router.POST("/project/new", RouteNewProject)
+	router.POST("/project/:id/create-folder", RouteNewFolder)
+	router.POST("/folder/:id/upload", RouteUploadFiles)
 
 	router.Run("localhost:8080")
 }

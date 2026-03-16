@@ -34,17 +34,8 @@ type TNewProjectRequest struct {
 
 // краткая информация об оптимизации (используется в списках)
 type TOptimizationPreview struct {
-	id         int
-	extension  Extension
-	created_at string
-}
-
-// полная информация об оптимизации
-type TOptimization struct {
-	id         int
-	project_id int
-	// расширение, в которое будут преобразованы файлы
-	output_extension Extension
-	// размер в процентах, в который будут уменьшены файлы (должен быть <= 100%)
-	output_size_percent int
+	Id              int    `json:"id"`
+	OutputExtension string `json:"output_extension"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
 }

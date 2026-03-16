@@ -209,9 +209,9 @@ func OrganizeFolders(folders []TFolder) []TFolder {
 
 // краткая информация о проекте (используется в списках)
 type TProjectPreview struct {
-	Id            int
-	Title         string
-	CreatedAt     string
-	UpdatedAt     string
-	Optimizations []TOptimizationPreview
+	Id            int                    `json:"id"`
+	Title         string                 `json:"title"`
+	CreatedAt     string                 `json:"created_at"`
+	UpdatedAt     string                 `json:"updated_at"`
+	Optimizations []TOptimizationPreview `json:"optimizations"`
 }
