@@ -96,7 +96,19 @@ func RouteCreateFolder(c *gin.Context) {
 		return
 	}
 
-	newFolder := NewFolderEntity(uploader.Id, filepath.Join(parentFolder.Path, folderName))
+	newFolderPath := filepath.Join(parentFolder.Path, folderName)
+
+	existingFolder := TFolderEntity{}
+	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE path = ? AND uploader_id = ?", newFolderPath, uploader.Id)
+	err = existingFolder.ScanFullRow(row)
+	if err == nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Folder already exists",
+		})
+		return
+	}
+
+	newFolder := NewFolderEntity(uploader.Id, newFolderPath)
 	err = newFolder.Save()
 	if err != nil {
 		text := "Could not save folder"
