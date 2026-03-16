@@ -35,5 +35,7 @@ func (rw *RouterWrapper) Up() {
 	router.POST("/project/:id/create-folder", RouteNewFolder)
 	router.POST("/folder/:id/upload", RouteUploadFiles)
 
+	router.DELETE("/project/:id", RouteDeleteProject)
+
 	router.Run("localhost:8080")
 }

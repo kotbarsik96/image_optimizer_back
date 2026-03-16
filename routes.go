@@ -130,7 +130,10 @@ func RouteNewProject(c *gin.Context) {
 	fmt.Println(images)
 	responseData := UploadProjectImages(uploader, folder, images)
 
-	c.JSON(http.StatusCreated, responseData)
+	c.JSON(http.StatusCreated, gin.H{
+		"message": fmt.Sprintf(`Project "%v" was created`, project.Title),
+		"data":    responseData,
+	})
 }
 
 func RouteNewFolder(c *gin.Context) {
@@ -218,4 +221,38 @@ func RouteUploadFiles(c *gin.Context) {
 	responseData := UploadProjectImages(uploader, folder, images)
 
 	c.JSON(http.StatusCreated, responseData)
+}
+
+func RouteDeleteProject(c *gin.Context) {
+	uploader := GetCurrentUploader(c)
+
+	projectId, convErr := strconv.Atoi(c.Param("id"))
+	project, err := GetProjectEntity(projectId)
+	if err != nil || convErr != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "Project not found",
+		})
+		return
+	}
+
+	if project.UploaderId != uploader.Id {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	stmt, err := dbwrapper.DB.Prepare("DELETE FROM projects WHERE id = ?")
+	if err == nil {
+		_, err = stmt.Exec(project.Id)
+	}
+
+	if err != nil {
+		utils.AbortWithError(c, http.StatusInternalServerError, "Could not delete project", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf(`Project "%v" was deleted`, project.Title),
+	})
 }
