@@ -79,7 +79,7 @@ func RouteGetProject(c *gin.Context) {
 	project, err := GetProjectEntity(id)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "Project not found",
+			"error": err,
 		})
 		return
 	}

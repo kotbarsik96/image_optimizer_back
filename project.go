@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image_optimizer/imgopt_db"
 	"path"
 	"slices"
@@ -37,7 +36,7 @@ func GetProjectEntity(id int) (TProjectEntity, error) {
 	entity := TProjectEntity{}
 	stmt := dbwrapper.DB.QueryRow("SELECT * FROM projects WHERE id = ?", id)
 	err := stmt.Scan(&entity.Id, &entity.UploaderId, &entity.Title, &entity.CreatedAt, &entity.UpdatedAt)
-	return entity, utils.GetSafeError(fmt.Errorf("Project not found"), err)
+	return entity, err
 }
 
 func (project *TProjectEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
@@ -66,7 +65,7 @@ func (project *TProjectEntity) GetUploader() (TUploaderEntity, error) {
 	var uploader TUploaderEntity
 	stmt := dbwrapper.DB.QueryRow("SELECT * FROM uploaders WHERE id = ?", project.UploaderId)
 	err := stmt.Scan(&uploader.Id, &uploader.Uuid)
-	return uploader, utils.GetSafeError(fmt.Errorf("Uploader not found"), err)
+	return uploader, err
 }
 
 func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {

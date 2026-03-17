@@ -8,26 +8,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type RouterWrapper struct {
-	router *gin.Engine
-	store  cookie.Store
+var router *gin.Engine
+var store cookie.Store
+
+func RouterUp() {
+	router = gin.Default()
+
+	store = cookie.NewStore([]byte(os.Getenv("SESSION_STORE_KEY")))
+	session := sessions.Sessions(os.Getenv("PROJECT_NAME"), store)
+	router.Use(session)
+
+	ListRoutes()
+
+	router.Run(os.Getenv("PROJECT_URL"))
 }
 
-func NewRouterWrapper() RouterWrapper {
-	var rw RouterWrapper
-
-	rw.router = gin.Default()
-
-	rw.store = cookie.NewStore([]byte(os.Getenv("SESSION_STORE_KEY")))
-
-	rw.router.Use(sessions.Sessions(os.Getenv("PROJECT_NAME"), rw.store))
-
-	return rw
-}
-
-func (rw *RouterWrapper) Up() {
-	router := rw.router
-
+func ListRoutes() {
 	router.GET("/projects", RouteGetProjectsList)
 	router.GET("/project/:id", RouteGetProject)
 
@@ -38,6 +34,4 @@ func (rw *RouterWrapper) Up() {
 	router.DELETE("/project/:id", RouteDeleteProject)
 	router.DELETE("/folder/:id", RouteDeleteFolder)
 	router.DELETE("/image/:id", RouteDeleteImage)
-
-	router.Run("localhost:8080")
 }
