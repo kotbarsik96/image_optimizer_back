@@ -14,24 +14,38 @@ var store cookie.Store
 func RouterUp() {
 	router = gin.Default()
 
-	store = cookie.NewStore([]byte(os.Getenv("SESSION_STORE_KEY")))
-	session := sessions.Sessions(os.Getenv("PROJECT_NAME"), store)
-	router.Use(session)
-
+	RegisterMiddlewares()
 	ListRoutes()
 
 	router.Run(os.Getenv("PROJECT_URL"))
 }
 
+func RegisterMiddlewares() {
+	store = cookie.NewStore([]byte(os.Getenv("SESSION_STORE_KEY")))
+	session := sessions.Sessions(os.Getenv("PROJECT_NAME"), store)
+	router.Use(session)
+
+	router.Use(ErrorHandler())
+}
+
 func ListRoutes() {
-	router.GET("/projects", RouteGetProjectsList)
-	router.GET("/project/:id", RouteGetProject)
+	projects := router.Group("/projects", AuthHandler())
+	{
+		projects.GET("/", RouteGetProjectsList)
+		projects.GET("/:project_id", ProjectAuthHandler(), RouteGetProject)
+		projects.POST("/", RouteNewProject)
+		projects.POST("/:project_id/folder", ProjectAuthHandler(), RouteNewFolder)
+		projects.DELETE("/:project_id", ProjectAuthHandler(), RouteDeleteProject)
+	}
 
-	router.POST("/project/new", RouteNewProject)
-	router.POST("/project/:id/create-folder", RouteNewFolder)
-	router.POST("/folder/:id/upload", RouteUploadFiles)
+	folders := router.Group("/folders", AuthHandler())
+	{
+		folders.POST("/:folder_id/upload", ProjectFolderAuthHandler(), RouteUploadFiles)
+		folders.DELETE("/:folder_id", ProjectFolderAuthHandler(), RouteDeleteFolder)
+	}
 
-	router.DELETE("/project/:id", RouteDeleteProject)
-	router.DELETE("/folder/:id", RouteDeleteFolder)
-	router.DELETE("/image/:id", RouteDeleteImage)
+	images := router.Group("/images", AuthHandler())
+	{
+		images.DELETE("/:image_id", RouteDeleteImage)
+	}
 }

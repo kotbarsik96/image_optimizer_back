@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	_ "image/jpeg"
 	_ "image/png"
 	"image_optimizer/imgopt_db"
@@ -14,11 +13,12 @@ import (
 var foldernameRegExp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
 
 type TFolderEntity struct {
-	Id         int    `json:"id"`
-	UploaderId int    `json:"uploader_id"`
-	Path       string `json:"path"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	Id             int    `json:"id"`
+	ProjectId      int    `json:"project_id"`
+	OptimizationId int    `json:"optimization_id"`
+	Path           string `json:"path"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type TFolder struct {
@@ -28,32 +28,10 @@ type TFolder struct {
 	Images  []TImageEntity `json:"images"`
 }
 
-func NewFolderEntity(uploaderId int, path string) TFolderEntity {
-	currentTime := utils.GetCurrentFormattedTime()
-
-	return TFolderEntity{
-		UploaderId: uploaderId,
-		Path:       path,
-		CreatedAt:  currentTime,
-		UpdatedAt:  currentTime,
-	}
-}
-
 func GetFolderEntity(id int) (TFolderEntity, error) {
 	folder := TFolderEntity{}
-
 	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE id = ?", id)
 	err := folder.ScanFullRow(row)
-
-	return folder, err
-}
-
-func GetFolderEntityByPath(path string) (TFolderEntity, error) {
-	folder := TFolderEntity{}
-
-	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE folders.path = ?", path)
-	err := row.Scan(folder)
-
 	return folder, err
 }
 
@@ -66,45 +44,11 @@ func (folder *TFolderEntity) Save() error {
 
 func (folder *TFolderEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
 	return row.Scan(&folder.Id,
-		&folder.UploaderId,
+		&folder.ProjectId,
+		&folder.OptimizationId,
 		&folder.Path,
 		&folder.CreatedAt,
 		&folder.UpdatedAt)
-}
-
-func (folder *TFolderEntity) GetProject() (TProjectEntity, error) {
-	project := TProjectEntity{}
-	row := dbwrapper.DB.QueryRow(`
-		SELECT * FROM projects WHERE id = (
-			SELECT project_id FROM projects_folders WHERE folder_id = ?
-		)
-	`, folder.Id)
-
-	err := project.ScanFullRow(row)
-
-	return project, err
-}
-
-func (folder *TFolderEntity) GetUploader() (TUploaderEntity, error) {
-	uploader := TUploaderEntity{}
-
-	row := dbwrapper.DB.QueryRow("SELECT * FROM uploaders WHERE id = ?", folder.UploaderId)
-	err := uploader.ScanFullRow(row)
-
-	return uploader, err
-}
-
-func (folder *TFolderEntity) SaveToProject(projectId int) error {
-	var id int
-	row := dbwrapper.DB.QueryRow("SELECT folder_id FROM projects_folders WHERE folder_id = ?", folder.Id)
-	err := row.Scan(&id)
-	if err == nil {
-		return fmt.Errorf("Folder %v already saved to project %v", folder.Id, projectId)
-	}
-
-	stmt, err := dbwrapper.DB.Prepare("INSERT INTO projects_folders VALUES(?, ?)")
-	stmt.Exec(projectId, folder.Id)
-	return err
 }
 
 func IsAcceptableFolderName(name string) bool {

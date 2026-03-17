@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image_optimizer/imgopt_db"
 	"path"
 	"slices"
@@ -17,19 +18,26 @@ type TProjectEntity struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
-func NewProjectEntity(uploader TUploaderEntity, title string) TProjectEntity {
+func NewProjectEntity(uploader TUploaderEntity, title string) (TProjectEntity, error) {
 	currentTime := utils.GetCurrentFormattedTime()
-	t := title
+	titleOrTime := title
 	if title == "" {
-		t = currentTime
+		titleOrTime = currentTime
+	}
+
+	existingProject := TProjectEntity{}
+	row := dbwrapper.DB.QueryRow("SELECT * FROM projects WHERE uploader_id = ? AND title = ?", uploader.Id, title)
+	err := existingProject.ScanFullRow(row)
+	if err == nil {
+		return TProjectEntity{}, fmt.Errorf(`Project %v already exists`, existingProject.Title)
 	}
 
 	return TProjectEntity{
 		UploaderId: uploader.Id,
-		Title:      t,
+		Title:      titleOrTime,
 		CreatedAt:  currentTime,
 		UpdatedAt:  currentTime,
-	}
+	}, nil
 }
 
 func GetProjectEntity(id int) (TProjectEntity, error) {
@@ -61,11 +69,34 @@ func (project *TProjectEntity) Delete() error {
 	return err
 }
 
-func (project *TProjectEntity) GetUploader() (TUploaderEntity, error) {
-	var uploader TUploaderEntity
-	stmt := dbwrapper.DB.QueryRow("SELECT * FROM uploaders WHERE id = ?", project.UploaderId)
-	err := stmt.Scan(&uploader.Id, &uploader.Uuid)
-	return uploader, err
+func (project *TProjectEntity) CreateFolderEntity(folderPath string) (TFolderEntity, error) {
+	id := 0
+	err := dbwrapper.DB.QueryRow("SELECT id FROM projects WHERE id = ?", project.Id).
+		Scan(&id)
+	if id == 0 {
+		return TFolderEntity{}, fmt.Errorf("Can't create folder for unsaved project")
+	}
+
+	folderName := path.Base(folderPath)
+	if !IsAcceptableFolderName(folderName) && folderPath != "." {
+		return TFolderEntity{}, fmt.Errorf("Invalid folder name %v", folderName)
+	}
+
+	existingFolder := TFolderEntity{}
+	row := dbwrapper.DB.QueryRow("SELECT * FROM folders WHERE path = ?")
+	err = existingFolder.ScanFullRow(row)
+	if err == nil {
+		return TFolderEntity{}, fmt.Errorf(`Folder %v already exists`, existingFolder.Path)
+	}
+
+	currentTime := utils.GetCurrentFormattedTime()
+
+	return TFolderEntity{
+		ProjectId: project.Id,
+		Path:      folderPath,
+		CreatedAt: currentTime,
+		UpdatedAt: currentTime,
+	}, nil
 }
 
 func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {
@@ -85,10 +116,7 @@ func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {
 			images.updated_at
 		FROM folders
 		LEFT JOIN images ON images.folder_id = folders.id
-		WHERE folders.id IN (
-			SELECT folder_id FROM projects_folders
-			WHERE project_id = ?
-		)
+		WHERE folders.project_id = ?
 		ORDER BY folders.path
 	`, project.Id)
 	if err != nil {
