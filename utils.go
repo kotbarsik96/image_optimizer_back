@@ -4,11 +4,8 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 type Utils struct{}
@@ -31,24 +28,15 @@ func (_ Utils) GetEnvMode() ProjectEnvMode {
 	return ENVMODE_PROD
 }
 
-func (u Utils) AbortWithError(c *gin.Context, code int, text string, err error, jsonObjects ...map[string]any) {
+func (u Utils) GetSafeError(safeError, describedError error) error {
 	mode := u.GetEnvMode()
-
-	jsonObj := make(map[string]any)
-	for _, jo := range jsonObjects {
-		maps.Copy(jsonObj, jo)
-	}
 
 	switch mode {
 	case ENVMODE_PROD:
-		maps.Copy(jsonObj, gin.H{
-			"error": text,
-		})
+		return safeError
 	case ENVMODE_DEV:
-		maps.Copy(jsonObj, gin.H{
-			"error": fmt.Sprintf("%v: %v", text, err),
-		})
+		return fmt.Errorf("%v: %v", safeError, describedError)
 	}
 
-	c.AbortWithStatusJSON(code, jsonObj)
+	return safeError
 }

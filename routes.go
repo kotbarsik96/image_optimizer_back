@@ -20,7 +20,9 @@ func RouteGetProjectsList(c *gin.Context) {
 		WHERE uploader_id = ?
 	`, uploader.Id)
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not get projects", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not get projects"), err),
+		})
 		return
 	}
 
@@ -30,7 +32,9 @@ func RouteGetProjectsList(c *gin.Context) {
 		}
 		err := rows.Scan(&project.Id, &project.Title, &project.CreatedAt, &project.UpdatedAt)
 		if err != nil {
-			utils.AbortWithError(c, http.StatusInternalServerError, "Error while trying to get project", err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": utils.GetSafeError(fmt.Errorf("Error while trying to get project"), err),
+			})
 			return
 		}
 
@@ -40,7 +44,9 @@ func RouteGetProjectsList(c *gin.Context) {
 			WHERE project_id = ?
 		`, project.Id)
 		if err != nil {
-			utils.AbortWithError(c, http.StatusInternalServerError, fmt.Sprintf("Could not get optimizations for project %v", project.Id), err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": utils.GetSafeError(fmt.Errorf("Could not get optimizations for project %v", project.Id), err),
+			})
 			return
 		}
 
@@ -48,12 +54,9 @@ func RouteGetProjectsList(c *gin.Context) {
 			opt := TOptimizationPreview{}
 			err := oRows.Scan(&opt.Id, &opt.OutputExtension, &opt.CreatedAt, &opt.UpdatedAt)
 			if err != nil {
-				utils.AbortWithError(
-					c,
-					http.StatusInternalServerError,
-					fmt.Sprintf("Error while trying to get optimization for project %v", project.Id),
-					err,
-				)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": utils.GetSafeError(fmt.Errorf("Error while trying to get optimization for project %v", project.Id), err),
+				})
 				return
 			}
 
@@ -72,9 +75,9 @@ func RouteGetProject(c *gin.Context) {
 	uploader := GetCurrentUploader(c)
 
 	idParam := c.Param("id")
-	id, convErr := strconv.Atoi(idParam)
+	id, _ := strconv.Atoi(idParam)
 	project, err := GetProjectEntity(id)
-	if err != nil || convErr != nil {
+	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Project not found",
 		})
@@ -92,7 +95,9 @@ func RouteGetProject(c *gin.Context) {
 
 	tree, err := project.GetFoldersTree()
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not get project", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not get project"), err),
+		})
 		return
 	}
 
@@ -109,7 +114,9 @@ func RouteNewProject(c *gin.Context) {
 	project := NewProjectEntity(uploader, c.PostForm("title"))
 	_, err := project.Save()
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save project", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not save project"), err),
+		})
 		return
 	}
 
@@ -117,7 +124,9 @@ func RouteNewProject(c *gin.Context) {
 	folder := NewFolderEntity(uploader.Id, ".")
 	err = folder.Save()
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save folder", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not save folder"), err),
+		})
 		return
 	}
 
@@ -139,10 +148,12 @@ func RouteNewProject(c *gin.Context) {
 func RouteNewFolder(c *gin.Context) {
 	uploader := GetCurrentUploader(c)
 
-	projectId, convErr := strconv.Atoi(c.Param("id"))
+	projectId, _ := strconv.Atoi(c.Param("id"))
 	project, err := GetProjectEntity(projectId)
-	if err != nil || convErr != nil {
-		utils.AbortWithError(c, http.StatusNotFound, "Project not found", err)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Project not found"), err),
+		})
 		return
 	}
 
@@ -161,9 +172,9 @@ func RouteNewFolder(c *gin.Context) {
 		return
 	}
 
-	parentId, convErr := strconv.Atoi(c.PostForm("parent_id"))
+	parentId, _ := strconv.Atoi(c.PostForm("parent_id"))
 	parentFolder, err := GetFolderEntity(parentId)
-	if err != nil || convErr != nil {
+	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Parent folder not found",
 		})
@@ -185,7 +196,9 @@ func RouteNewFolder(c *gin.Context) {
 	newFolder := NewFolderEntity(uploader.Id, newFolderPath)
 	err = newFolder.Save()
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not save folder", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not save folder"), err),
+		})
 		return
 	}
 
@@ -200,9 +213,9 @@ func RouteUploadFiles(c *gin.Context) {
 	// получение текущего пользователя, загружающего изображения в проект
 	uploader := GetCurrentUploader(c)
 
-	folderId, err := strconv.Atoi(c.Param("id"))
-	folder, fErr := GetFolderEntity(folderId)
-	if err != nil || fErr != nil {
+	folderId, _ := strconv.Atoi(c.Param("id"))
+	folder, err := GetFolderEntity(folderId)
+	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "Folder not found",
 		})
@@ -226,11 +239,11 @@ func RouteUploadFiles(c *gin.Context) {
 func RouteDeleteProject(c *gin.Context) {
 	uploader := GetCurrentUploader(c)
 
-	projectId, convErr := strconv.Atoi(c.Param("id"))
+	projectId, _ := strconv.Atoi(c.Param("id"))
 	project, err := GetProjectEntity(projectId)
-	if err != nil || convErr != nil {
+	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "Project not found",
+			"error": err,
 		})
 		return
 	}
@@ -248,11 +261,93 @@ func RouteDeleteProject(c *gin.Context) {
 	}
 
 	if err != nil {
-		utils.AbortWithError(c, http.StatusInternalServerError, "Could not delete project", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not delete project"), err),
+		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf(`Project "%v" was deleted`, project.Title),
+	})
+}
+
+func RouteDeleteFolder(c *gin.Context) {
+	uploader := GetCurrentUploader(c)
+
+	folderId, _ := strconv.Atoi(c.Param("id"))
+	folder, err := GetFolderEntity(folderId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": err,
+		})
+		return
+	}
+
+	if folder.UploaderId != uploader.Id {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	stmt, err := dbwrapper.DB.Prepare("DELETE FROM folders WHERE id = ?")
+	if err == nil {
+		_, err = stmt.Exec(folder.Id)
+	}
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not delete folder"), err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf(`Folder "%v" was deleted`, folder.Path),
+	})
+}
+
+func RouteDeleteImage(c *gin.Context) {
+	uploader := GetCurrentUploader(c)
+
+	imageId, _ := strconv.Atoi(c.Param("id"))
+	image, err := GetImageEntity(imageId)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": err,
+		})
+		return
+	}
+
+	folder, err := image.GetFolder()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": err,
+		})
+		return
+	}
+
+	if folder.UploaderId != uploader.Id {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "Unauthorzed",
+		})
+		return
+	}
+
+	stmt, err := dbwrapper.DB.Prepare("DELETE FROM images WHERE id = ?")
+	if err == nil {
+		_, err = stmt.Exec(image.Id)
+	}
+
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": utils.GetSafeError(fmt.Errorf("Could not delete image"), err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf(`Image "%v" was deleted`, fmt.Sprintf("%v.%v", image.Filename, image.Extension)),
 	})
 }

@@ -36,6 +36,8 @@ func (rw *RouterWrapper) Up() {
 	router.POST("/folder/:id/upload", RouteUploadFiles)
 
 	router.DELETE("/project/:id", RouteDeleteProject)
+	router.DELETE("/folder/:id", RouteDeleteFolder)
+	router.DELETE("/image/:id", RouteDeleteImage)
 
 	router.Run("localhost:8080")
 }

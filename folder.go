@@ -58,6 +58,7 @@ func GetFolderEntityByPath(path string) (TFolderEntity, error) {
 }
 
 func (folder *TFolderEntity) Save() error {
+	folder.UpdatedAt = utils.GetCurrentFormattedTime()
 	id, err := dbwrapper.SaveEntity("folders", folder)
 	folder.Id = id
 	return err
