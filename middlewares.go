@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ErrorHandler() gin.HandlerFunc {
+func ErrorMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
@@ -40,7 +40,7 @@ func ErrorHandler() gin.HandlerFunc {
 	}
 }
 
-func AuthHandler() gin.HandlerFunc {
+func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
 		idFromSession := session.Get("uploader")
@@ -71,7 +71,7 @@ func AuthHandler() gin.HandlerFunc {
 	}
 }
 
-func ProjectAuthHandler() gin.HandlerFunc {
+func ProjectAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploader := c.MustGet("uploader").(TUploaderEntity)
 		projectId, _ := strconv.Atoi(c.Param("project_id"))
@@ -97,7 +97,7 @@ func ProjectAuthHandler() gin.HandlerFunc {
 	}
 }
 
-func ProjectFolderAuthHandler() gin.HandlerFunc {
+func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uploader := c.MustGet("uploader").(TUploaderEntity)
 		folderId, _ := strconv.Atoi(c.Param("folder_id"))
