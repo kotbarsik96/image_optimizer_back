@@ -34,6 +34,7 @@ func ListRoutes() {
 		projects.GET("/", RouteGetProjectsList)
 		projects.GET("/:project_id", ProjectAuthMiddleware(), RouteGetProject)
 		projects.POST("/", RouteNewProject)
+		projects.POST("/:project_id/rename", ProjectAuthMiddleware(), RouteRenameProject)
 		projects.POST("/:project_id/folder", ProjectAuthMiddleware(), RouteNewFolder)
 		projects.DELETE("/:project_id", ProjectAuthMiddleware(), RouteDeleteProject)
 	}

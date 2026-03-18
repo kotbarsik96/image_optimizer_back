@@ -135,6 +135,37 @@ func RouteNewProject(c *gin.Context) {
 	})
 }
 
+func RouteRenameProject(c *gin.Context) {
+	uploader := c.MustGet("uploader").(TUploaderEntity)
+	project := c.MustGet("project").(TProjectEntity)
+
+	newTitle := c.PostForm("title")
+	var existingTitle string
+	err := dbwrapper.DB.QueryRow("SELECT title FROM projects WHERE title = ? AND uploader_id = ?", newTitle, uploader.Id).
+		Scan(&existingTitle)
+	if err == nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				fmt.Sprintf("Project %v already exists", existingTitle),
+				nil),
+		})
+		return
+	}
+
+	project.Title = newTitle
+	_, err = project.Save()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not save project", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Project title set to %v", project.Title),
+	})
+}
+
 func RouteNewFolder(c *gin.Context) {
 	project := c.MustGet("project").(TProjectEntity)
 

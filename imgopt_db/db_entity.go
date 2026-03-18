@@ -66,11 +66,14 @@ func (dw *DatabaseWrapper) SaveEntity(table string, entity any) (int, error) {
 		return 0, err
 	}
 
-	args := make([]any, len(values)+1)
+	args := make([]any, 0, len(values)+1)
 	args = append(args, valuesWithoutId...)
 	args = append(args, entityId)
 
 	r, err := stmt.Exec(args...)
+	if err != nil {
+		return 0, err
+	}
 	insertedId, err := r.LastInsertId()
 
 	return int(insertedId), err
