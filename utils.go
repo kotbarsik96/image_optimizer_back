@@ -3,17 +3,39 @@ package main
 import (
 	"crypto/md5"
 	"io"
-	"time"
+	"strings"
 )
 
-type Utils struct{}
-
-func (_ Utils) Md5(s string) []byte {
+func Md5(s string) []byte {
 	h := md5.New()
 	io.WriteString(h, s)
 	return h.Sum(nil)
 }
 
-func (_ Utils) GetCurrentFormattedTime() string {
-	return time.Now().Format(time.DateTime)
+func IsAcceptablePathName(name string) bool {
+	if !foldernameRegExp.MatchString(name) {
+		return false
+	}
+
+	if strings.ReplaceAll(name, ".", "") == "" {
+		return false
+	}
+
+	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
+		return false
+	}
+
+	base := strings.ToUpper(name)
+	if i := strings.IndexByte(base, '.'); i >= 0 {
+		base = base[:i]
+	}
+
+	switch base {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return false
+	}
+
+	return true
 }

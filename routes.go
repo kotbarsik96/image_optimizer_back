@@ -1,72 +1,32 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func RouteGetProjectsList(c *gin.Context) {
-	uploader := c.MustGet("uploader").(TUploaderEntity)
+	uploader := c.MustGet("uploader").(Uploader)
 
-	projects := []TProjectPreview{}
+	projects := []struct {
+		// Optimizations []Optimization
+		ID        uint
+		Title     string
+		CreatedAt time.Time
+		UpdatedAt time.Time
+	}{}
 
-	rows, err := dbwrapper.DB.Query(`
-		SELECT id, title, created_at, updated_at
-		FROM projects
-		WHERE uploader_id = ?
-	`, uploader.Id)
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not get projects", err),
-		})
-		return
-	}
-
-	for rows.Next() {
-		project := TProjectPreview{
-			Optimizations: []TOptimizationPreview{},
-		}
-		err := rows.Scan(&project.Id, &project.Title, &project.CreatedAt, &project.UpdatedAt)
-		if err != nil {
-			RespondError(c, Response{
-				Error: ErrInternal("Could not get project", err),
-			})
-			return
-		}
-
-		oRows, err := dbwrapper.DB.Query(`
-			SELECT id, output_extension, created_at, updated_at
-			FROM optimizations
-			WHERE project_id = ?
-		`, project.Id)
-		if err != nil {
-			RespondError(c, Response{
-				Error: ErrInternal("Could not get optimizations", err),
-			})
-			return
-		}
-
-		for oRows.Next() {
-			opt := TOptimizationPreview{}
-			err := oRows.Scan(&opt.Id, &opt.OutputExtension, &opt.CreatedAt, &opt.UpdatedAt)
-			if err != nil {
-				RespondError(c, Response{
-					Error: ErrInternal(
-						fmt.Sprintf("Colud not get optimization for project %v", project.Id),
-						err),
-				})
-				return
-			}
-
-			project.Optimizations = append(project.Optimizations, opt)
-		}
-
-		projects = append(projects, project)
-	}
+	gormDb.
+		Select("id", "title", "created_at", "updated_at").
+		Where("uploader_id = ?", uploader.ID).
+		Find(&projects)
 
 	RespondOk(c, Response{
 		Data: projects,
@@ -74,51 +34,63 @@ func RouteGetProjectsList(c *gin.Context) {
 }
 
 func RouteGetProject(c *gin.Context) {
-	project := c.MustGet("project").(TProjectEntity)
+	project := c.MustGet("project").(Project)
 
-	tree, err := project.GetFoldersTree()
+	rootFolder, err := project.RootFolder()
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrInternal("Could not get project folders", err),
+			Error: ErrInternal("Could not get project folder", err),
 		})
 		return
 	}
 
+	prPreview := ProjectPreview{
+		ID:         project.ID,
+		CreatedAt:  project.CreatedAt,
+		UpdatedAt:  project.UpdatedAt,
+		RootFolder: rootFolder,
+		Title:      project.Title,
+	}
+
 	RespondOk(c, Response{
-		Data: tree,
+		Data: prPreview,
 	})
 }
 
 func RouteNewProject(c *gin.Context) {
-	uploader := c.MustGet("uploader").(TUploaderEntity)
+	ctx := context.Background()
 
-	project, err := NewProjectEntity(uploader, c.PostForm("title"))
-	if err != nil {
+	uploader := c.MustGet("uploader").(Uploader)
+
+	title := strings.TrimSpace(c.PostForm("title"))
+	if title == "" {
 		RespondError(c, Response{
-			Error: ErrBadRequest(err.Error(), nil),
-		})
-		return
-	}
-	_, err = project.Save()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not save project", err),
+			Error: ErrBadRequest("Invalid project name", nil),
 		})
 		return
 	}
 
-	folder, err := project.CreateFolderEntity(".")
+	project := Project{
+		UploaderID: uploader.ID,
+		Title:      c.PostForm("title"),
+	}
+	err := gorm.G[Project](gormDb).Create(ctx, &project)
+
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest(err.Error(), nil),
+			Error: ErrInternal("Could not create project", err),
 		})
 		return
 	}
 
-	err = folder.Save()
+	folder := Folder{
+		ProjectID: project.ID,
+		Path:      ".",
+	}
+	err = gorm.G[Folder](gormDb).Create(ctx, &folder)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrInternal("Could not save folder", err),
+			Error: ErrInternal("Could not create folder", err),
 		})
 		return
 	}
@@ -137,25 +109,27 @@ func RouteNewProject(c *gin.Context) {
 }
 
 func RouteRenameProject(c *gin.Context) {
-	uploader := c.MustGet("uploader").(TUploaderEntity)
-	project := c.MustGet("project").(TProjectEntity)
+	ctx := context.Background()
 
-	newTitle := c.PostForm("title")
-	var existingTitle string
-	err := dbwrapper.DB.QueryRow("SELECT title FROM projects WHERE title = ? AND uploader_id = ?", newTitle, uploader.Id).
-		Scan(&existingTitle)
-	if err == nil {
+	uploader := c.MustGet("uploader").(Uploader)
+	project := c.MustGet("project").(Project)
+
+	newTitle := strings.TrimSpace(c.PostForm("title"))
+	existingProject, err := gorm.G[Project](gormDb).
+		Where("title = ? AND uploader_id = ?", newTitle, uploader.ID).
+		First(ctx)
+	if err == nil && existingProject.Title == newTitle {
 		RespondError(c, Response{
 			Error: ErrBadRequest(
-				fmt.Sprintf("Project %v already exists", existingTitle),
+				fmt.Sprintf("Project %v already exists", existingProject.Title),
 				nil),
 		})
 		return
 	}
 
 	project.Title = newTitle
-	_, err = project.Save()
-	if err != nil {
+	gormDb.Save(&project)
+	if project.Title != newTitle {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not save project", err),
 		})
@@ -169,10 +143,14 @@ func RouteRenameProject(c *gin.Context) {
 }
 
 func RouteNewFolder(c *gin.Context) {
-	project := c.MustGet("project").(TProjectEntity)
+	ctx := context.Background()
+
+	project := c.MustGet("project").(Project)
 
 	parentId, _ := strconv.Atoi(c.PostForm("parent_id"))
-	parentFolder, err := GetFolderEntity(parentId)
+	parentFolder, err := gorm.G[Folder](gormDb).
+		Where("id = ?", parentId).
+		First(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrBadRequest("Invalid parent folder", err),
@@ -181,22 +159,24 @@ func RouteNewFolder(c *gin.Context) {
 	}
 
 	newFolderPath := path.Join(parentFolder.Path, c.PostForm("name"))
-
-	newFolder, err := project.CreateFolderEntity(newFolderPath)
-	if err != nil {
+	existingFolder, err := gorm.G[Folder](gormDb).
+		Where("project_id = ? AND path = ?", project.ID, newFolderPath).
+		First(ctx)
+	if err == nil && existingFolder.Path == newFolderPath {
 		RespondError(c, Response{
-			Error: ErrBadRequest(err.Error(), nil),
+			Error: ErrBadRequest(
+				fmt.Sprintf("Folder %v already exists in project %v", existingFolder.Path, project.Title),
+				err,
+			),
 		})
 		return
 	}
 
-	err = newFolder.Save()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not save folder", err),
-		})
-		return
+	newFolder := Folder{
+		Path:      newFolderPath,
+		ProjectID: project.ID,
 	}
+	gormDb.Save(&newFolder)
 
 	RespondCreated(c, Response{
 		Data: newFolder,
@@ -204,8 +184,8 @@ func RouteNewFolder(c *gin.Context) {
 }
 
 func RouteUploadFiles(c *gin.Context) {
-	uploader := c.MustGet("uploader").(TUploaderEntity)
-	folder := c.MustGet("folder").(TFolderEntity)
+	uploader := c.MustGet("uploader").(Uploader)
+	folder := c.MustGet("folder").(Folder)
 
 	form, _ := c.MultipartForm()
 	images := form.File["images"]
@@ -220,21 +200,25 @@ func RouteUploadFiles(c *gin.Context) {
 }
 
 func RouteRenameFolder(c *gin.Context) {
-	folder := c.MustGet("folder").(TFolderEntity)
+	ctx := context.Background()
 
-	project, err := GetProjectEntity(folder.ProjectId)
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrBadRequest("Folder is not associated with any project", err),
-		})
-		return
-	}
+	folder := c.MustGet("folder").(Folder)
 
 	if folder.Path == "." {
 		RespondError(c, Response{
 			Error: ErrBadRequest(
 				"Invalid request parameters",
 				fmt.Errorf("Cannot rename root folder")),
+		})
+		return
+	}
+
+	project, err := gorm.G[Project](gormDb).
+		Where("id = ?", folder.ProjectID).
+		First(ctx)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Folder is not associated with any project", err),
 		})
 		return
 	}
@@ -249,47 +233,36 @@ func RouteRenameFolder(c *gin.Context) {
 
 	newPath := path.Join(path.Dir(folder.Path), newName)
 
-	var existingPath string
-	err = dbwrapper.DB.QueryRow("SELECT path FROM folders WHERE path = ? AND project_id = ?", newPath, project.Id).
-		Scan(&existingPath)
+	existingFolder, err := gorm.G[Folder](gormDb).
+		Where("path = ? AND project_id = ?", newPath, project.ID).
+		First(ctx)
 	if err == nil {
 		RespondError(c, Response{
 			Error: ErrBadRequest(
-				fmt.Sprintf("Folder %v already exists in project %v", existingPath, project.Title),
+				fmt.Sprintf("Folder %v already exists in project %v", existingFolder.Path, project.Title),
 				nil),
 		})
 		return
 	}
 
 	folder.Path = newPath
-	err = folder.Save()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrBadRequest(
-				"Could not save folder",
-				err),
-		})
-		return
-	}
+	gormDb.Save(&folder)
 
 	RespondOk(c, Response{
 		Message: fmt.Sprintf("Folder renamed to %v (%v)", newName, folder.Path),
 		Data: gin.H{
-			"project": project,
-			"folder":  folder,
+			"folder": folder,
 		},
 	})
 }
 
 func RouteDeleteProject(c *gin.Context) {
-	project := c.MustGet("project").(TProjectEntity)
-	fmt.Println(project)
+	ctx := context.Background()
+	project := c.MustGet("project").(Project)
 
-	stmt, err := dbwrapper.DB.Prepare("DELETE FROM projects WHERE id = ?")
-	if err == nil {
-		_, err = stmt.Exec(project.Id)
-	}
-
+	_, err := gorm.G[Project](gormDb).
+		Where("id = ?", project.ID).
+		Delete(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not delete project", err),
@@ -302,29 +275,35 @@ func RouteDeleteProject(c *gin.Context) {
 	})
 }
 
+func RouteGetFolder(c *gin.Context) {}
+
 func RouteDeleteFolder(c *gin.Context) {
-	folder := c.MustGet("folder").(TFolderEntity)
+	// folder := c.MustGet("folder").(TFolderEntity)
 
-	stmt, err := dbwrapper.DB.Prepare("DELETE FROM folders WHERE id = ?")
-	if err == nil {
-		_, err = stmt.Exec(folder.Id)
-	}
+	// stmt, err := dbwrapper.DB.Prepare("DELETE FROM folders WHERE id = ?")
+	// if err == nil {
+	// 	_, err = stmt.Exec(folder.Id)
+	// }
 
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not delete folder", err),
-		})
-		return
-	}
+	// if err != nil {
+	// 	RespondError(c, Response{
+	// 		Error: ErrInternal("Could not delete folder", err),
+	// 	})
+	// 	return
+	// }
 
-	RespondOk(c, Response{
-		Message: fmt.Sprintf(`Folder "%v" was deleted`, folder.Path),
-	})
+	// RespondOk(c, Response{
+	// 	Message: fmt.Sprintf(`Folder "%v" was deleted`, folder.Path),
+	// })
 }
 
 func RouteRenameImage(c *gin.Context) {
-	img := c.MustGet("image").(TImageEntity)
-	folder, err := GetFolderEntity(img.FolderId)
+	ctx := context.Background()
+
+	img := c.MustGet("image").(Image)
+	folder, err := gorm.G[Folder](gormDb).
+		Where("id = ?", img.FolderID).
+		First(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get folder", err),
@@ -332,7 +311,7 @@ func RouteRenameImage(c *gin.Context) {
 		return
 	}
 
-	newName := c.PostForm("name")
+	newName := strings.TrimSpace(c.PostForm("name"))
 	if !IsAcceptablePathName(newName) {
 		RespondError(c, Response{
 			Error: ErrBadRequest("Invalid filename", nil),
@@ -340,26 +319,20 @@ func RouteRenameImage(c *gin.Context) {
 		return
 	}
 
-	var existingName string
-	err = dbwrapper.DB.QueryRow("SELECT filename FROM images WHERE images.folder_id = ? AND images.filename = ?", folder.Id, newName).
-		Scan(&existingName)
-	if err == nil {
+	existingImage, err := gorm.G[Image](gormDb).
+		Where("folder_id = ? AND filename = ?", folder.ID, newName).
+		First(ctx)
+	if err == nil && existingImage.Filename == newName {
 		RespondError(c, Response{
 			Error: ErrBadRequest(
-				fmt.Sprintf("Image %v already exists in folder %v", existingName, folder.Path),
+				fmt.Sprintf("Image %v already exists in folder %v", existingImage.Filename, folder.Path),
 				nil),
 		})
 		return
 	}
 
 	img.Filename = newName
-	err = img.Save()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not save image", err),
-		})
-		return
-	}
+	gormDb.Save(&img)
 
 	RespondOk(c, Response{
 		Message: fmt.Sprintf("Image renamed to %v", img.Filename),
@@ -370,21 +343,21 @@ func RouteRenameImage(c *gin.Context) {
 }
 
 func RouteDeleteImage(c *gin.Context) {
-	image := c.MustGet("image").(TImageEntity)
+	// image := c.MustGet("image").(TImageEntity)
 
-	stmt, err := dbwrapper.DB.Prepare("DELETE FROM images WHERE id = ?")
-	if err == nil {
-		_, err = stmt.Exec(image.Id)
-	}
+	// stmt, err := dbwrapper.DB.Prepare("DELETE FROM images WHERE id = ?")
+	// if err == nil {
+	// 	_, err = stmt.Exec(image.Id)
+	// }
 
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not delete image", err),
-		})
-		return
-	}
+	// if err != nil {
+	// 	RespondError(c, Response{
+	// 		Error: ErrInternal("Could not delete image", err),
+	// 	})
+	// 	return
+	// }
 
-	RespondOk(c, Response{
-		Message: fmt.Sprintf(`Image %v was deleted`, image.Filename),
-	})
+	// RespondOk(c, Response{
+	// 	Message: fmt.Sprintf(`Image %v was deleted`, image.Filename),
+	// })
 }
