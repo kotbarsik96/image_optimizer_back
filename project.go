@@ -25,6 +25,6 @@ type ProjectPreview struct {
 	ID         uint
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
-	RootFolder Folder
+	RootFolder FolderWithNested
 	Title      string
 }

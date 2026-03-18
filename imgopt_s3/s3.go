@@ -2,9 +2,7 @@ package imgopt_s3
 
 import (
 	"context"
-	"fmt"
 	"mime/multipart"
-	"net/url"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -54,42 +52,21 @@ func (bb *BucketBasis) GetClient() (*s3.Client, error) {
 	return client, err
 }
 
-func (bb *BucketBasis) UploadFile(
-	ctx context.Context,
-	uploaderUuid,
-	path string,
-	file multipart.File,
-	contentType string) (string, *s3.PutObjectOutput, error) {
+func (bb *BucketBasis) UploadFile(ctx context.Context, bucket, key string, file multipart.File, contentType string) (
+	*s3.PutObjectOutput, error) {
 	client, err := bb.GetClient()
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	output, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(os.Getenv("S3_BUCKET")),
-		Key:         aws.String(bb.GetFilePath(uploaderUuid, path)),
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
 		Body:        file,
 		ContentType: aws.String(contentType),
 	})
 
-	return bb.GetFileUrl(uploaderUuid, path), output, err
-}
-
-func (bb *BucketBasis) GetFilePath(uploaderUuid string, path string) string {
-	return fmt.Sprintf("%v/%v/%v",
-		os.Getenv("PROJECT_NAME"),
-		uploaderUuid,
-		path)
-}
-
-func (bb *BucketBasis) GetFileUrl(uploaderUuid string, p string) string {
-	escapedPath := url.PathEscape(p)
-
-	return fmt.Sprintf("%v/%v/%v",
-		os.Getenv("S3_ENDPOINT_URL"),
-		os.Getenv("S3_BUCKET"),
-		bb.GetFilePath(uploaderUuid, escapedPath),
-	)
+	return output, err
 }
 
 func (bb *BucketBasis) IsAvailable() error {

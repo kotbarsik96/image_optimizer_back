@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image_optimizer/imgopt_s3"
 	"mime/multipart"
+	"os"
 	"path"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 type Image struct {
 	gorm.Model
 	FolderID  uint `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Url       string
+	S3Url     string
+	Bucket    string
+	Key       string
 	Extension string
 	Filename  string
 	SizeBytes string
@@ -47,18 +50,24 @@ func UploadProjectImages(
 			continue
 		}
 
-		fullpath := path.Join(folder.Path, imgFileHeader.Filename)
-
 		extension := path.Ext(imgFileHeader.Filename)[1:]
-		url, _, err := bucket.UploadFile(context.TODO(), uploader.Uuid, fullpath, file, "image/"+extension)
+
+		s3Url := os.Getenv("S3_ENDPOINT_URL")
+		s3Bucket := os.Getenv("S3_BUCKET")
+		key := fmt.Sprintf("%v/%v/%v", os.Getenv("PROJECT_NAME"), uploader.Uuid, folder.Path)
+
+		_, err = bucket.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
+
 		file.Close()
 
 		if err == nil {
 			img := Image{
 				FolderID:  folder.ID,
+				S3Url:     s3Url,
+				Bucket:    s3Bucket,
+				Key:       key,
 				Extension: extension,
 				Filename:  fmt.Sprintf(`%v_%v`, imgFileHeader.Filename, Md5(time.Now().String())),
-				Url:       url,
 			}
 			err := gorm.G[Image](gormDb).Create(ctx, &img)
 

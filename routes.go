@@ -45,11 +45,14 @@ func RouteGetProject(c *gin.Context) {
 	}
 
 	prPreview := ProjectPreview{
-		ID:         project.ID,
-		CreatedAt:  project.CreatedAt,
-		UpdatedAt:  project.UpdatedAt,
-		RootFolder: rootFolder,
-		Title:      project.Title,
+		ID:        project.ID,
+		CreatedAt: project.CreatedAt,
+		UpdatedAt: project.UpdatedAt,
+		RootFolder: FolderWithNested{
+			Folder: rootFolder,
+			Nested: rootFolder.GetNested(),
+		},
+		Title: project.Title,
 	}
 
 	RespondOk(c, Response{

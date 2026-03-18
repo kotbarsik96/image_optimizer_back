@@ -19,6 +19,12 @@ type Folder struct {
 	Images         []Image
 }
 
+func (folder *Folder) GetNested() []FolderWithNested {
+	return []FolderWithNested{}
+	// nested := gorm.G[Folder](gormDb).
+	// 	Where("")
+}
+
 type FolderWithNested struct {
 	Folder
 	Nested []FolderWithNested
