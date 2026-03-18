@@ -163,6 +163,7 @@ func RouteRenameProject(c *gin.Context) {
 
 	RespondOk(c, Response{
 		Message: fmt.Sprintf("Project title set to %v", project.Title),
+		Data:    project,
 	})
 }
 
@@ -213,6 +214,68 @@ func RouteUploadFiles(c *gin.Context) {
 		Data: gin.H{
 			"folder":  folder,
 			"uploads": responseData,
+		},
+	})
+}
+
+func RouteRenameFolder(c *gin.Context) {
+	folder := c.MustGet("folder").(TFolderEntity)
+
+	project, err := GetProjectEntity(folder.ProjectId)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Folder is not associated with any project", err),
+		})
+		return
+	}
+
+	if folder.Path == "." {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				"Invalid request parameters",
+				fmt.Errorf("Cannot rename root folder")),
+		})
+		return
+	}
+
+	newName := c.PostForm("name")
+	if !IsAcceptableFolderName(newName) {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Invalid folder name", nil),
+		})
+		return
+	}
+
+	newPath := path.Join(path.Dir(folder.Path), newName)
+
+	var existingPath string
+	err = dbwrapper.DB.QueryRow("SELECT path FROM folders WHERE path = ? AND project_id = ?", newPath, project.Id).
+		Scan(&existingPath)
+	if err == nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				fmt.Sprintf("Folder %v already exists in project %v", existingPath, project.Title),
+				nil),
+		})
+		return
+	}
+
+	folder.Path = newPath
+	err = folder.Save()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				"Could not save folder",
+				err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Folder renamed to %v (%v)", newName, folder.Path),
+		Data: gin.H{
+			"project": project,
+			"folder":  folder,
 		},
 	})
 }
