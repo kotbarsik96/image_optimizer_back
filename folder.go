@@ -51,12 +51,12 @@ func (folder *TFolderEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
 		&folder.UpdatedAt)
 }
 
-func IsAcceptableFolderName(name string) bool {
+func IsAcceptablePathName(name string) bool {
 	if !foldernameRegExp.MatchString(name) {
 		return false
 	}
 
-	if name == "." || name == ".." {
+	if strings.ReplaceAll(name, ".", "") == "" {
 		return false
 	}
 
@@ -83,6 +83,7 @@ func IsAcceptableFolderName(name string) bool {
 type TFileEntity struct {
 	Id        int    `json:"id"`
 	FolderId  int    `json:"folder_id"`
+	Url       string `json:"url"`
 	Extension string `json:"extension"`
 	Filename  string `json:"filename"`
 	SizeBytes int    `json:"size_bytes"`

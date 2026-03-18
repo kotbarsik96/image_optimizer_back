@@ -48,6 +48,7 @@ func ListRoutes() {
 
 	images := router.Group("/images", AuthMiddleware())
 	{
-		images.DELETE("/:image_id", RouteDeleteImage)
+		images.POST("/:image_id/rename", ProjectImageAuthMiddleware(), RouteRenameImage)
+		images.DELETE("/:image_id", ProjectImageAuthMiddleware(), RouteDeleteImage)
 	}
 }

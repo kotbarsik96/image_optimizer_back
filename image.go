@@ -20,7 +20,7 @@ type TImageEntity struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, filename string) (TImageEntity, error) {
+func NewImageEntity(imgFileheader *multipart.FileHeader, url string, folder TFolderEntity, filename string) (TImageEntity, error) {
 	currentTime := utils.GetCurrentFormattedTime()
 
 	extension := path.Ext(imgFileheader.Filename)[1:]
@@ -31,6 +31,7 @@ func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, f
 
 	entity := TImageEntity{
 		TFileEntity: TFileEntity{
+			Url:       url,
 			FolderId:  folder.Id,
 			Extension: extension,
 			Filename:  strings.Split(filename, ".")[0],
@@ -50,6 +51,7 @@ func NewImageEntity(imgFileheader *multipart.FileHeader, folder TFolderEntity, f
 func (img *TImageEntity) ScanFullRow(row imgopt_db.DatabaseRow) error {
 	return row.Scan(&img.Id,
 		&img.FolderId,
+		&img.Url,
 		&img.Extension,
 		&img.Filename,
 		&img.SizeBytes,
@@ -81,59 +83,37 @@ func (img *TImageEntity) GetFolder() (TFolderEntity, error) {
 	return folder, err
 }
 
-func (img *TImageEntity) GetProject() (TProjectEntity, error) {
-	project := TProjectEntity{}
+// func (img *TImageEntity) GetUrl() string {
+// 	var bucket imgopt_s3.BucketBasis
 
-	row := dbwrapper.DB.QueryRow(`
-		SELECT * FROM projects WHERE id = (
-			SELECT project_id FROM projects_folders WHERE folder_id = ?
-		)
-	`, img.FolderId)
+// 	var uploaderUuid string
+// 	var folderPath string
+// 	err := dbwrapper.DB.QueryRow(`
+// 		SELECT
+// 			uploaders.uuid AS uploader_uuid,
+// 			folders.path AS folder_path
+// 		FROM uploaders
+// 		JOIN projects ON projects.uploader_id = uploaders.id
+// 		JOIN folders ON folders.project_id = projects.id
+// 		JOIN images ON images.folder_id = folders.id
+// 		WHERE images.id = ?
+// 	`, img.Id).
+// 		Scan(&uploaderUuid, &folderPath)
+// 	if err != nil {
+// 		return ""
+// 	}
 
-	err := project.ScanFullRow(row)
-
-	return project, err
-}
-
-func (img *TImageEntity) GetUploader() (TUploaderEntity, error) {
-	uploader := TUploaderEntity{}
-
-	row := dbwrapper.DB.QueryRow(`
-		SELECT * FROM uploaders WHERE id = (
-			SELECT uploader_id FROM folders WHERE id = ?
-		)
-	`, img.FolderId)
-
-	err := uploader.ScanFullRow(row)
-
-	return uploader, err
-}
-
-func (img *TImageEntity) GetUrl() string {
-	var bucket imgopt_s3.BucketBasis
-
-	uploader, err := img.GetUploader()
-	if err != nil {
-		return ""
-	}
-
-	folder, err := img.GetFolder()
-	if err != nil {
-		return ""
-	}
-
-	ipath := folder.Path + "/"
-	if ipath == "./" {
-		ipath = ""
-	}
-	path := fmt.Sprintf("%v%v.%v", ipath, img.Filename, img.Extension)
-	return bucket.GetFileUrl(uploader.Uuid, path)
-}
+// 	ipath := folderPath + "/"
+// 	if ipath == "./" {
+// 		ipath = ""
+// 	}
+// 	path := fmt.Sprintf("%v%v.%v", ipath, img.Filename, img.Extension)
+// 	return bucket.GetFileUrl(uploaderUuid, path)
+// }
 
 type TUploadData struct {
 	Err   error        `json:"error"`
 	Image TImageEntity `json:"image"`
-	Url   string       `json:"url"`
 }
 
 func UploadProjectImages(
@@ -157,19 +137,18 @@ func UploadProjectImages(
 		fullpath := path.Join(folder.Path, img.Filename)
 
 		extension := path.Ext(img.Filename)[1:]
-		_, err = bucket.UploadFile(context.TODO(), uploader.Uuid, fullpath, file, "image/"+extension)
+		url, _, err := bucket.UploadFile(context.TODO(), uploader.Uuid, fullpath, file, "image/"+extension)
 		file.Close()
 
 		if err == nil {
-			imgEntity, err := NewImageEntity(img, folder, img.Filename)
+			imgEntity, err := NewImageEntity(img, url, folder, img.Filename)
 			err = imgEntity.Save()
+			fmt.Println(err)
 			if err != nil {
 				data.Err = err
 			} else {
-				data.Url = imgEntity.GetUrl()
+				data.Image = imgEntity
 			}
-
-			data.Image = imgEntity
 		} else {
 			data.Err = err
 		}

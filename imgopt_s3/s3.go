@@ -54,10 +54,15 @@ func (bb *BucketBasis) GetClient() (*s3.Client, error) {
 	return client, err
 }
 
-func (bb *BucketBasis) UploadFile(ctx context.Context, uploaderUuid, path string, file multipart.File, contentType string) (*s3.PutObjectOutput, error) {
+func (bb *BucketBasis) UploadFile(
+	ctx context.Context,
+	uploaderUuid,
+	path string,
+	file multipart.File,
+	contentType string) (string, *s3.PutObjectOutput, error) {
 	client, err := bb.GetClient()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	output, err := client.PutObject(ctx, &s3.PutObjectInput{
@@ -67,7 +72,7 @@ func (bb *BucketBasis) UploadFile(ctx context.Context, uploaderUuid, path string
 		ContentType: aws.String(contentType),
 	})
 
-	return output, err
+	return bb.GetFileUrl(uploaderUuid, path), output, err
 }
 
 func (bb *BucketBasis) GetFilePath(uploaderUuid string, path string) string {
@@ -85,4 +90,20 @@ func (bb *BucketBasis) GetFileUrl(uploaderUuid string, p string) string {
 		os.Getenv("S3_BUCKET"),
 		bb.GetFilePath(uploaderUuid, escapedPath),
 	)
+}
+
+func (bb *BucketBasis) IsAvailable() error {
+	client, err := bb.GetClient()
+	if err != nil {
+		return err
+	}
+
+	_, err = client.HeadBucket(context.TODO(), &s3.HeadBucketInput{
+		Bucket: aws.String(os.Getenv("S3_BUCKET")),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

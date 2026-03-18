@@ -41,14 +41,14 @@ var migrations []string = []string{
 	`
 		CREATE TABLE IF NOT EXISTS "folders" (
 			"id"	INTEGER NOT NULL,
-			"project_id" INTEGER,
-			"optimization_id" INTEGER,
+			"project_id"	INTEGER,
+			"optimization_id"	INTEGER,
 			"path"	TEXT,
-			"created_at" TEXT,
-			"updated_at" TEXT,
+			"created_at"	TEXT,
+			"updated_at"	TEXT,
 			PRIMARY KEY("id"),
-			FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE
-			FOREIGN KEY ("optimization_id") REFERENCES "optimizations"("id") ON DELETE CASCADE ON UPDATE CASCADE
+			FOREIGN KEY("optimization_id") REFERENCES "optimizations"("id") ON UPDATE CASCADE ON DELETE CASCADE,
+			FOREIGN KEY("project_id") REFERENCES "projects"("id") ON UPDATE CASCADE ON DELETE CASCADE
 		);
 	`,
 
@@ -57,6 +57,7 @@ var migrations []string = []string{
 		CREATE TABLE IF NOT EXISTS "images" (
 			"id"	INTEGER NOT NULL,
 			"folder_id"	INTEGER,
+			"url" TEXT,
 			"extension"	TEXT,
 			"filename"	TEXT,
 			"size_bytes"	INTEGER,
@@ -65,7 +66,7 @@ var migrations []string = []string{
 			"created_at"	TEXT,
 			"updated_at"	TEXT,
 			PRIMARY KEY("id"),
-			FOREIGN KEY("folder_id") REFERENCES "folders"("id") ON DELETE CASCADE ON UPDATE CASCADE
+			FOREIGN KEY("folder_id") REFERENCES "folders"("id") ON UPDATE CASCADE ON DELETE CASCADE
 		);
 	`,
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -238,8 +239,8 @@ func RouteRenameFolder(c *gin.Context) {
 		return
 	}
 
-	newName := c.PostForm("name")
-	if !IsAcceptableFolderName(newName) {
+	newName := strings.TrimSpace(c.PostForm("name"))
+	if !IsAcceptablePathName(newName) {
 		RespondError(c, Response{
 			Error: ErrBadRequest("Invalid folder name", nil),
 		})
@@ -321,6 +322,69 @@ func RouteDeleteFolder(c *gin.Context) {
 	})
 }
 
-func RouteDeleteImage(c *gin.Context) {
+func RouteRenameImage(c *gin.Context) {
+	img := c.MustGet("image").(TImageEntity)
+	folder, err := GetFolderEntity(img.FolderId)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get folder", err),
+		})
+		return
+	}
 
+	newName := c.PostForm("name")
+	if !IsAcceptablePathName(newName) {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Invalid filename", nil),
+		})
+		return
+	}
+
+	var existingName string
+	err = dbwrapper.DB.QueryRow("SELECT filename FROM images WHERE images.folder_id = ? AND images.filename = ?", folder.Id, newName).
+		Scan(&existingName)
+	if err == nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				fmt.Sprintf("Image %v already exists in folder %v", existingName, folder.Path),
+				nil),
+		})
+		return
+	}
+
+	img.Filename = newName
+	err = img.Save()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not save image", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Image renamed to %v", img.Filename),
+		Data: gin.H{
+			"image": img,
+		},
+	})
+}
+
+func RouteDeleteImage(c *gin.Context) {
+	image := c.MustGet("image").(TImageEntity)
+
+	stmt, err := dbwrapper.DB.Prepare("DELETE FROM images WHERE id = ?")
+	if err == nil {
+		_, err = stmt.Exec(image.Id)
+	}
+
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not delete image", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf(`Image %v was deleted`, image.Filename),
+	})
 }

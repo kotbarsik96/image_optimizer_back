@@ -127,3 +127,34 @@ func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func ProjectImageAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uploader := c.MustGet("uploader").(TUploaderEntity)
+		imageId, _ := strconv.Atoi(c.Param("image_id"))
+
+		var uploaderId int
+		err := dbwrapper.DB.QueryRow(`
+			SELECT uploaders.id FROM uploaders
+			JOIN projects ON projects.uploader_id = uploaders.id
+			JOIN folders ON folders.project_id = projects.id
+			JOIN images ON images.folder_id = folders.id
+			WHERE images.id = ?
+		`, imageId).Scan(&uploaderId)
+
+		if err != nil || (uploader.Id != uploaderId && uploaderId != 0) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrUnauthorized("", nil))
+			return
+		}
+
+		image, err := GetImageEntity(imageId)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, ErrInternal("", err))
+			return
+		}
+
+		c.Set("image", image)
+
+		c.Next()
+	}
+}

@@ -77,8 +77,8 @@ func (project *TProjectEntity) CreateFolderEntity(folderPath string) (TFolderEnt
 		return TFolderEntity{}, fmt.Errorf("Can't create folder for unsaved project")
 	}
 
-	folderName := path.Base(folderPath)
-	if !IsAcceptableFolderName(folderName) && folderPath != "." {
+	folderName := strings.TrimSpace(path.Base(folderPath))
+	if !IsAcceptablePathName(folderName) && folderPath != "." {
 		return TFolderEntity{}, fmt.Errorf("Invalid folder name %v", folderName)
 	}
 
@@ -107,6 +107,7 @@ func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {
 			folders.id,
 			folders.path,
 			images.id,
+			images.url,
 			images.extension,
 			images.filename,
 			images.size_bytes,
@@ -133,6 +134,7 @@ func (project *TProjectEntity) GetFoldersTree() ([]TFolder, error) {
 			&id,
 			&path,
 			&img.Id,
+			&img.Url,
 			&img.Extension,
 			&img.Filename,
 			&img.SizeBytes,
