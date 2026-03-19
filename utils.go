@@ -45,3 +45,13 @@ func GetFilenameWithoutExtension(fname string) string {
 	s := strings.Split(fname, ".")
 	return strings.Join(s[0:len(s)-1], ".")
 }
+
+func FilterSlice[V any](slice []V, filterFunc func(index int, item V, slice []V) bool) []V {
+	newSlice := []V{}
+	for index, item := range slice {
+		if filterFunc(index, item, newSlice) {
+			newSlice = append(newSlice, item)
+		}
+	}
+	return newSlice
+}

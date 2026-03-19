@@ -24,6 +24,7 @@ func RouteGetProjectsList(c *gin.Context) {
 	}{}
 
 	gormDb.
+		Table("projects").
 		Select("id", "title", "created_at", "updated_at").
 		Where("uploader_id = ?", uploader.ID).
 		Find(&projects)

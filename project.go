@@ -8,10 +8,12 @@ import (
 )
 
 type Project struct {
-	gorm.Model
-	UploaderID uint `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Folders    []Folder
-	Title      string
+	ID         uint      `gorm:"primarykey" json:"id"`
+	UploaderID uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"uploader_id,omitzero"`
+	Folders    []Folder  `json:"folders,omitzero"`
+	Title      string    `json:"title,omitzero"`
+	CreatedAt  time.Time `json:"created_at,omitzero"`
+	UpdatedAt  time.Time `json:"updated_at,omitzero"`
 }
 
 func (project *Project) RootFolder() (Folder, error) {
@@ -22,9 +24,9 @@ func (project *Project) RootFolder() (Folder, error) {
 }
 
 type ProjectPreview struct {
-	ID         uint
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	RootFolder FolderWithNested
-	Title      string
+	ID         uint             `json:"id,omitzero"`
+	CreatedAt  time.Time        `json:"created_at,omitzero"`
+	UpdatedAt  time.Time        `json:"updated_at,omitzero"`
+	RootFolder FolderWithNested `json:"root_folder"`
+	Title      string           `json:"title"`
 }

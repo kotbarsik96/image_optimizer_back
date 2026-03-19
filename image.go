@@ -14,16 +14,18 @@ import (
 )
 
 type Image struct {
-	gorm.Model
-	FolderID  uint `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	S3Url     string
-	Bucket    string
-	Key       string
-	Extension string
-	Filename  string
-	SizeBytes uint
-	Width     uint
-	Height    uint
+	ID        uint      `gorm:"primarykey" json:"id"`
+	FolderID  uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
+	S3Url     string    `json:"s3_url,omitzero"`
+	Bucket    string    `json:"bucket,omitzero"`
+	Key       string    `json:"key,omitzero"`
+	Extension string    `json:"extension,omitzero"`
+	Filename  string    `json:"filename,omitzero"`
+	SizeBytes uint      `json:"size_bytes,omitzero"`
+	Width     uint      `json:"width,omitzero"`
+	Height    uint      `json:"height,omitzero"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
 }
 
 func (image *Image) GetUrl() string {

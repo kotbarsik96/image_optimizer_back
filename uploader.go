@@ -1,11 +1,11 @@
 package main
 
-import (
-	"gorm.io/gorm"
-)
+import "time"
 
 type Uploader struct {
-	gorm.Model
-	Uuid     string
-	Projects []Project
+	ID        uint      `gorm:"primarykey" json:"id"`
+	Uuid      string    `json:"uuid,omitzero"`
+	Projects  []Project `json:"projects,omitzero"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
 }
