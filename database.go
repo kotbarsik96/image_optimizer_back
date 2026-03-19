@@ -12,7 +12,7 @@ var gormDb *gorm.DB
 var sqlDb *sql.DB
 
 func DatabaseUp() {
-	openedDb, err := gorm.Open(sqlite.Open("database.db"), &gorm.Config{})
+	openedDb, err := gorm.Open(sqlite.Open("database.db?_foreign_keys=on"), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Could not open database: %v", err)
 	}

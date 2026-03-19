@@ -35,7 +35,7 @@ func RespondCreated(c *gin.Context, response Response) {
 func RespondError(c *gin.Context, response Response) {
 	c.JSON(response.Error.Status, gin.H{
 		"ok":    false,
-		"error": response.Error,
+		"error": response.Error.Error(),
 	})
 }
 

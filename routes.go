@@ -306,6 +306,13 @@ func RouteGetFolder(c *gin.Context) {
 func RouteDeleteFolder(c *gin.Context) {
 	folder := c.MustGet("folder").(Folder)
 
+	if folder.Path == "." {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Cannot delete root folder", nil),
+		})
+		return
+	}
+
 	err := folder.Delete()
 	if err != nil {
 		RespondError(c, Response{

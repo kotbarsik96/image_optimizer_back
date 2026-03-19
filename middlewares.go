@@ -82,9 +82,16 @@ func ProjectAuthMiddleware() gin.HandlerFunc {
 		projectId, _ := strconv.Atoi(c.Param("project_id"))
 		project, err := gorm.G[Project](gormDb).Where("id = ?", projectId).First(context.Background())
 		if err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusNotFound,
-				ErrNotFound("Project not found", err))
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(
+					http.StatusNotFound,
+					ErrNotFound("Project not found", err))
+			} else {
+				c.AbortWithStatusJSON(
+					http.StatusInternalServerError,
+					ErrInternal("", err))
+			}
+
 			return
 		}
 
@@ -111,9 +118,16 @@ func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 		folderId, _ := strconv.Atoi(c.Param("folder_id"))
 		folder, err := gorm.G[Folder](gormDb).Where("id = ?", folderId).First(ctx)
 		if err != nil {
-			c.AbortWithStatusJSON(
-				http.StatusNotFound,
-				ErrNotFound("Folder not found", err))
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(
+					http.StatusNotFound,
+					ErrNotFound("Folder not found", err))
+			} else {
+				c.AbortWithStatusJSON(
+					http.StatusInternalServerError,
+					ErrInternal("", nil))
+			}
+
 			return
 		}
 
@@ -143,8 +157,19 @@ func ProjectImageAuthMiddleware() gin.HandlerFunc {
 		uploader := c.MustGet("uploader").(Uploader)
 		imageId, _ := strconv.Atoi(c.Param("image_id"))
 
+		image, err := gorm.G[Image](gormDb).Where("id = ?", imageId).First(ctx)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(http.StatusNotFound, ErrNotFound("Image not found", err))
+			} else {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, ErrInternal("", err))
+			}
+
+			return
+		}
+
 		var uploaderId uint
-		err := sqlDb.QueryRow(`
+		err = sqlDb.QueryRow(`
 			SELECT uploaders.id FROM uploaders
 			JOIN projects ON projects.uploader_id = uploaders.id
 			JOIN folders ON folders.project_id = projects.id
@@ -154,12 +179,6 @@ func ProjectImageAuthMiddleware() gin.HandlerFunc {
 
 		if err != nil || (uploader.ID != uploaderId && uploaderId != 0) {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrUnauthorized("", nil))
-			return
-		}
-
-		image, err := gorm.G[Image](gormDb).Where("id = ?", imageId).First(ctx)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, ErrInternal("", err))
 			return
 		}
 

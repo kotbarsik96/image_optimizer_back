@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
@@ -44,13 +45,21 @@ func (folder *Folder) GetNested() []Folder {
 func (folder *Folder) Delete() error {
 	ctx := context.Background()
 
+	if folder.Path == "." {
+		return fmt.Errorf("Cannot delete root folder")
+	}
+
 	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
 	if err != nil {
 		return err
 	}
 
+	imageIds := []uint{}
+
 	byBuckets := make(map[string][]string)
 	for _, img := range images {
+		imageIds = append(imageIds, img.ID)
+
 		_, ok := byBuckets[img.Bucket]
 		if !ok {
 			byBuckets[img.Bucket] = []string{}
@@ -66,9 +75,21 @@ func (folder *Folder) Delete() error {
 		}
 	}
 
+	_, err = gorm.G[Image](gormDb).
+		Where("id IN ?", imageIds).
+		Delete(ctx)
+
+	if err != nil {
+		log.Printf("Error deleting folder images: %v", err)
+	}
+
 	_, err = gorm.G[Folder](gormDb).
 		Where("id = ?", folder.ID).
 		Delete(ctx)
+
+	if err != nil {
+		log.Printf("Error deleting folder: %v", err)
+	}
 
 	return err
 }
