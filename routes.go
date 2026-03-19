@@ -44,16 +44,14 @@ func RouteGetProject(c *gin.Context) {
 		})
 		return
 	}
+	rootFolder.Nested = rootFolder.GetNested()
 
 	prPreview := ProjectPreview{
-		ID:        project.ID,
-		CreatedAt: project.CreatedAt,
-		UpdatedAt: project.UpdatedAt,
-		RootFolder: FolderWithNested{
-			Folder: rootFolder,
-			Nested: rootFolder.GetNested(),
-		},
-		Title: project.Title,
+		ID:         project.ID,
+		CreatedAt:  project.CreatedAt,
+		UpdatedAt:  project.UpdatedAt,
+		RootFolder: rootFolder,
+		Title:      project.Title,
 	}
 
 	RespondOk(c, Response{
@@ -279,26 +277,46 @@ func RouteDeleteProject(c *gin.Context) {
 	})
 }
 
-func RouteGetFolder(c *gin.Context) {}
+func RouteGetFolder(c *gin.Context) {
+	ctx := context.Background()
+
+	folder := c.MustGet("folder").(Folder)
+	images, err := gorm.G[Image](gormDb).
+		Where("folder_id = ?", folder.ID).
+		Find(ctx)
+	folder.Images = images
+	folder.Nested = folder.GetNested()
+
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal(
+				fmt.Sprintf("Could not retrieve images for folder %v", folder.Path),
+				err,
+			),
+			Data: folder,
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Data: folder,
+	})
+}
 
 func RouteDeleteFolder(c *gin.Context) {
-	// folder := c.MustGet("folder").(TFolderEntity)
+	folder := c.MustGet("folder").(Folder)
 
-	// stmt, err := dbwrapper.DB.Prepare("DELETE FROM folders WHERE id = ?")
-	// if err == nil {
-	// 	_, err = stmt.Exec(folder.Id)
-	// }
+	err := folder.Delete()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not delete folder", err),
+		})
+		return
+	}
 
-	// if err != nil {
-	// 	RespondError(c, Response{
-	// 		Error: ErrInternal("Could not delete folder", err),
-	// 	})
-	// 	return
-	// }
-
-	// RespondOk(c, Response{
-	// 	Message: fmt.Sprintf(`Folder "%v" was deleted`, folder.Path),
-	// })
+	RespondOk(c, Response{
+		Message: fmt.Sprintf(`Folder %v was deleted`, folder.Path),
+	})
 }
 
 func RouteRenameImage(c *gin.Context) {
@@ -347,21 +365,16 @@ func RouteRenameImage(c *gin.Context) {
 }
 
 func RouteDeleteImage(c *gin.Context) {
-	// image := c.MustGet("image").(TImageEntity)
+	image := c.MustGet("image").(Image)
+	err := image.Delete()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not delete image", err),
+		})
+		return
+	}
 
-	// stmt, err := dbwrapper.DB.Prepare("DELETE FROM images WHERE id = ?")
-	// if err == nil {
-	// 	_, err = stmt.Exec(image.Id)
-	// }
-
-	// if err != nil {
-	// 	RespondError(c, Response{
-	// 		Error: ErrInternal("Could not delete image", err),
-	// 	})
-	// 	return
-	// }
-
-	// RespondOk(c, Response{
-	// 	Message: fmt.Sprintf(`Image %v was deleted`, image.Filename),
-	// })
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Image %v was deleted", image.Filename),
+	})
 }

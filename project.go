@@ -24,9 +24,9 @@ func (project *Project) RootFolder() (Folder, error) {
 }
 
 type ProjectPreview struct {
-	ID         uint             `json:"id,omitzero"`
-	CreatedAt  time.Time        `json:"created_at,omitzero"`
-	UpdatedAt  time.Time        `json:"updated_at,omitzero"`
-	RootFolder FolderWithNested `json:"root_folder"`
-	Title      string           `json:"title"`
+	ID         uint      `json:"id,omitzero"`
+	CreatedAt  time.Time `json:"created_at,omitzero"`
+	UpdatedAt  time.Time `json:"updated_at,omitzero"`
+	RootFolder Folder    `json:"root_folder"`
+	Title      string    `json:"title"`
 }

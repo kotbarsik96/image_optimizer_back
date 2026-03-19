@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"image_optimizer/imgopt_s3"
+	"log"
 	"mime/multipart"
 	"net/url"
 	"os"
@@ -21,6 +21,7 @@ type Image struct {
 	Key       string    `json:"key,omitzero"`
 	Extension string    `json:"extension,omitzero"`
 	Filename  string    `json:"filename,omitzero"`
+	Url       string    `gorm:"-" json:"url"`
 	SizeBytes uint      `json:"size_bytes,omitzero"`
 	Width     uint      `json:"width,omitzero"`
 	Height    uint      `json:"height,omitzero"`
@@ -32,9 +33,21 @@ func (image *Image) GetUrl() string {
 	return (fmt.Sprintf("%v/%v", image.S3Url, url.PathEscape(path.Join(image.Bucket, image.Key))))
 }
 
+func (image *Image) Delete() error {
+	ctx := context.Background()
+
+	err := s3Actions.DeleteFiles(ctx, image.Bucket, []string{image.Key})
+	if err != nil {
+		log.Printf("Could not delete images from S3: %v", err)
+	}
+
+	_, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
+	return err
+}
+
 type ImageWithUrl struct {
 	Image
-	Url string
+	Url string `json:"url"`
 }
 
 type UploadData struct {
@@ -47,8 +60,6 @@ func UploadProjectImages(
 	folder Folder,
 	images []*multipart.FileHeader,
 ) []UploadData {
-	var bucket imgopt_s3.BucketBasis
-
 	responseData := []UploadData{}
 
 	for _, imgFileHeader := range images {
@@ -75,7 +86,7 @@ func UploadProjectImages(
 		}
 		key = path.Join(key, fmt.Sprintf("%v.%v", filename, extension))
 
-		_, err = bucket.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
+		_, err = s3Actions.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
 
 		file.Close()
 
@@ -107,4 +118,9 @@ func UploadProjectImages(
 	}
 
 	return responseData
+}
+
+func (image *Image) AfterFind(tx *gorm.DB) (err error) {
+	image.Url = image.GetUrl()
+	return
 }

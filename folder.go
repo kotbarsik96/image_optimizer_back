@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "image/jpeg"
 	_ "image/png"
+	"log"
 	"path"
 	"regexp"
 	"time"
@@ -19,6 +20,7 @@ type Folder struct {
 	ProjectID      uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
 	OptimizationID uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
 	Path           string    `json:"path,omitzero"`
+	Nested         []Folder  `gorm:"-" json:"nested,omitzero"`
 	Images         []Image   `json:"images,omitzero"`
 	CreatedAt      time.Time `json:"created_at,omitzero"`
 	UpdatedAt      time.Time `json:"updated_at,omitzero"`
@@ -39,7 +41,34 @@ func (folder *Folder) GetNested() []Folder {
 	return folders
 }
 
-type FolderWithNested struct {
-	Folder
-	Nested []Folder `json:"nested"`
+func (folder *Folder) Delete() error {
+	ctx := context.Background()
+
+	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
+	if err != nil {
+		return err
+	}
+
+	byBuckets := make(map[string][]string)
+	for _, img := range images {
+		_, ok := byBuckets[img.Bucket]
+		if !ok {
+			byBuckets[img.Bucket] = []string{}
+		}
+
+		byBuckets[img.Bucket] = append(byBuckets[img.Bucket], img.Key)
+	}
+
+	for bucket, keys := range byBuckets {
+		err := s3Actions.DeleteFiles(ctx, bucket, keys)
+		if err != nil {
+			log.Printf("Could not delete images from S3: %v", err)
+		}
+	}
+
+	_, err = gorm.G[Folder](gormDb).
+		Where("id = ?", folder.ID).
+		Delete(ctx)
+
+	return err
 }

@@ -41,7 +41,7 @@ func ListRoutes() {
 
 	folders := router.Group("/folders", AuthMiddleware())
 	{
-		folders.GET("/:folder_id", ProjectFolderAuthMiddleware())
+		folders.GET("/:folder_id", ProjectFolderAuthMiddleware(), RouteGetFolder)
 		folders.POST("/:folder_id/upload", ProjectFolderAuthMiddleware(), RouteUploadFiles)
 		folders.POST("/:folder_id/rename", ProjectFolderAuthMiddleware(), RouteRenameFolder)
 		folders.DELETE("/:folder_id", ProjectFolderAuthMiddleware(), RouteDeleteFolder)
