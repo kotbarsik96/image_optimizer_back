@@ -2,14 +2,15 @@ package main
 
 import (
 	"crypto/md5"
+	"fmt"
 	"io"
 	"strings"
 )
 
-func Md5(s string) []byte {
+func Md5(s string) string {
 	h := md5.New()
 	io.WriteString(h, s)
-	return h.Sum(nil)
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func IsAcceptablePathName(name string) bool {
@@ -38,4 +39,9 @@ func IsAcceptablePathName(name string) bool {
 	}
 
 	return true
+}
+
+func GetFilenameWithoutExtension(fname string) string {
+	s := strings.Split(fname, ".")
+	return strings.Join(s[0:len(s)-1], ".")
 }

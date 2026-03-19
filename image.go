@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image_optimizer/imgopt_s3"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path"
 	"time"
@@ -20,14 +21,23 @@ type Image struct {
 	Key       string
 	Extension string
 	Filename  string
-	SizeBytes string
+	SizeBytes uint
 	Width     uint
 	Height    uint
 }
 
+func (image *Image) GetUrl() string {
+	return (fmt.Sprintf("%v/%v", image.S3Url, url.PathEscape(path.Join(image.Bucket, image.Key))))
+}
+
+type ImageWithUrl struct {
+	Image
+	Url string
+}
+
 type UploadData struct {
-	Err   error `json:"error"`
-	Image Image `json:"image"`
+	Err   error        `json:"error"`
+	Image ImageWithUrl `json:"image"`
 }
 
 func UploadProjectImages(
@@ -54,7 +64,14 @@ func UploadProjectImages(
 
 		s3Url := os.Getenv("S3_ENDPOINT_URL")
 		s3Bucket := os.Getenv("S3_BUCKET")
-		key := fmt.Sprintf("%v/%v/%v", os.Getenv("PROJECT_NAME"), uploader.Uuid, folder.Path)
+
+		hash := Md5(time.Now().String())
+		filename := fmt.Sprintf(`%v_%v`, GetFilenameWithoutExtension(imgFileHeader.Filename), hash)
+		key := path.Join(os.Getenv("PROJECT_NAME"), uploader.Uuid)
+		if folder.Path != "." {
+			key = path.Join(key, folder.Path)
+		}
+		key = path.Join(key, fmt.Sprintf("%v.%v", filename, extension))
 
 		_, err = bucket.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
 
@@ -67,14 +84,18 @@ func UploadProjectImages(
 				Bucket:    s3Bucket,
 				Key:       key,
 				Extension: extension,
-				Filename:  fmt.Sprintf(`%v_%v`, imgFileHeader.Filename, Md5(time.Now().String())),
+				Filename:  filename,
+				SizeBytes: uint(imgFileHeader.Size),
 			}
 			err := gorm.G[Image](gormDb).Create(ctx, &img)
 
 			if err != nil {
 				data.Err = err
 			} else {
-				data.Image = img
+				data.Image = ImageWithUrl{
+					Image: img,
+					Url:   img.GetUrl(),
+				}
 			}
 		} else {
 			data.Err = err
