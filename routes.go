@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// projects
+
 func RouteGetProjectsList(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 
@@ -32,30 +34,6 @@ func RouteGetProjectsList(c *gin.Context) {
 
 	RespondOk(c, Response{
 		Data: projects,
-	})
-}
-
-func RouteGetProject(c *gin.Context) {
-	project := c.MustGet("project").(Project)
-
-	rootFolder, err := project.RootFolder()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not get project folder", err),
-		})
-		return
-	}
-
-	prPreview := ProjectPreview{
-		ID:         project.ID,
-		CreatedAt:  project.CreatedAt,
-		UpdatedAt:  project.UpdatedAt,
-		RootFolder: rootFolder,
-		Title:      project.Title,
-	}
-
-	RespondOk(c, Response{
-		Data: prPreview,
 	})
 }
 
@@ -110,6 +88,47 @@ func RouteNewProject(c *gin.Context) {
 	})
 }
 
+func RouteGetProject(c *gin.Context) {
+	project := c.MustGet("project").(Project)
+
+	rootFolder, err := project.RootFolder()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get project folder", err),
+		})
+		return
+	}
+
+	prPreview := ProjectPreview{
+		ID:         project.ID,
+		CreatedAt:  project.CreatedAt,
+		UpdatedAt:  project.UpdatedAt,
+		RootFolder: rootFolder,
+		Title:      project.Title,
+	}
+
+	RespondOk(c, Response{
+		Data: prPreview,
+	})
+}
+
+func RouteDeleteProject(c *gin.Context) {
+	project := c.MustGet("project").(Project)
+
+	err := project.Delete()
+
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not delete project", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf(`Project "%v" was deleted`, project.Title),
+	})
+}
+
 func RouteRenameProject(c *gin.Context) {
 	ctx := context.Background()
 
@@ -144,18 +163,68 @@ func RouteRenameProject(c *gin.Context) {
 	})
 }
 
+// folders
+
+func RouteGetFolder(c *gin.Context) {
+	ctx := context.Background()
+
+	folder := c.MustGet("folder").(Folder)
+	images, imagesErr := gorm.G[Image](gormDb).
+		Where("folder_id = ?", folder.ID).
+		Find(ctx)
+	folder.Images = images
+
+	nestedFolders, nestedFoldersErr := folder.GetNested(ctx)
+	folder.Nested = nestedFolders
+
+	if imagesErr != nil || nestedFoldersErr != nil {
+		var msg string
+		if imagesErr != nil && nestedFoldersErr != nil {
+			msg = "Could not contents of folder"
+		} else if imagesErr != nil {
+			msg = "Could not images"
+		} else if nestedFoldersErr != nil {
+			msg = "Could not get folders"
+		}
+
+		RespondError(c, Response{
+			Error: ErrInternal(msg, fmt.Errorf("%v and %v", imagesErr, nestedFoldersErr)),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Data: folder,
+	})
+}
+
 func RouteNewFolder(c *gin.Context) {
 	ctx := context.Background()
 
-	project := c.MustGet("project").(Project)
+	uploader := c.MustGet("uploader").(Uploader)
 
-	parentId, _ := strconv.Atoi(c.PostForm("parent_id"))
+	parentId, _ := strconv.Atoi(c.Param("parent_folder_id"))
 	parentFolder, err := gorm.G[Folder](gormDb).
 		Where("id = ?", parentId).
 		First(ctx)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Invalid parent folder", err),
+			Error: ErrNotFound("Parent folder not found", err),
+		})
+		return
+	}
+
+	project, err := gorm.G[Project](gormDb).Where("id = ?", parentFolder.ProjectID).First(ctx)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Parent folder is not assigned to any project", err),
+		})
+		return
+	}
+
+	if project.UploaderID != uploader.ID {
+		RespondError(c, Response{
+			Error: ErrUnauthorized("", nil),
 		})
 		return
 	}
@@ -183,6 +252,35 @@ func RouteNewFolder(c *gin.Context) {
 
 	RespondCreated(c, Response{
 		Data: newFolder,
+	})
+}
+
+func RouteDeleteFolder(c *gin.Context) {
+	folder := c.MustGet("folder").(Folder)
+
+	if folder.Path == "." {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Cannot delete root folder", nil),
+		})
+		return
+	}
+
+	err := folder.Delete()
+	if err != nil {
+		if errors.Is(err, ErrCannotDeleteRootFolder) {
+			RespondError(c, Response{
+				Error: ErrBadRequest(err.Error(), nil),
+			})
+		} else {
+			RespondError(c, Response{
+				Error: ErrInternal("Could not delete folder", err),
+			})
+		}
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf(`Folder %v was deleted`, folder.Path),
 	})
 }
 
@@ -259,82 +357,20 @@ func RouteRenameFolder(c *gin.Context) {
 	})
 }
 
-func RouteDeleteProject(c *gin.Context) {
-	project := c.MustGet("project").(Project)
+// images
 
-	err := project.Delete()
-
+func RouteDeleteImage(c *gin.Context) {
+	image := c.MustGet("image").(Image)
+	err := image.Delete()
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrInternal("Could not delete project", err),
+			Error: ErrInternal("Could not delete image", err),
 		})
 		return
 	}
 
 	RespondOk(c, Response{
-		Message: fmt.Sprintf(`Project "%v" was deleted`, project.Title),
-	})
-}
-
-func RouteGetFolder(c *gin.Context) {
-	ctx := context.Background()
-
-	folder := c.MustGet("folder").(Folder)
-	images, imagesErr := gorm.G[Image](gormDb).
-		Where("folder_id = ?", folder.ID).
-		Find(ctx)
-	folder.Images = images
-
-	nestedFolders, nestedFoldersErr := folder.GetNested(ctx)
-	folder.Nested = nestedFolders
-
-	if imagesErr != nil || nestedFoldersErr != nil {
-		var msg string
-		if imagesErr != nil && nestedFoldersErr != nil {
-			msg = "Could not contents of folder"
-		} else if imagesErr != nil {
-			msg = "Could not images"
-		} else if nestedFoldersErr != nil {
-			msg = "Could not get folders"
-		}
-
-		RespondError(c, Response{
-			Error: ErrInternal(msg, fmt.Errorf("%v and %v", imagesErr, nestedFoldersErr)),
-		})
-		return
-	}
-
-	RespondOk(c, Response{
-		Data: folder,
-	})
-}
-
-func RouteDeleteFolder(c *gin.Context) {
-	folder := c.MustGet("folder").(Folder)
-
-	if folder.Path == "." {
-		RespondError(c, Response{
-			Error: ErrBadRequest("Cannot delete root folder", nil),
-		})
-		return
-	}
-
-	err := folder.Delete()
-	if err != nil {
-		if errors.Is(err, ErrCannotDeleteRootFolder) {
-			RespondError(c, Response{
-				Error: ErrBadRequest(err.Error(), nil),
-			})
-		} else {
-			RespondError(c, Response{
-				Error: ErrInternal("Could not delete folder", err),
-			})
-		}
-		return
-	}
-
-	RespondOk(c, Response{
-		Message: fmt.Sprintf(`Folder %v was deleted`, folder.Path),
+		Message: fmt.Sprintf("Image %v was deleted", image.Filename),
 	})
 }
 
@@ -380,20 +416,5 @@ func RouteRenameImage(c *gin.Context) {
 		Data: gin.H{
 			"image": img,
 		},
-	})
-}
-
-func RouteDeleteImage(c *gin.Context) {
-	image := c.MustGet("image").(Image)
-	err := image.Delete()
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not delete image", err),
-		})
-		return
-	}
-
-	RespondOk(c, Response{
-		Message: fmt.Sprintf("Image %v was deleted", image.Filename),
 	})
 }
