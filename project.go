@@ -22,6 +22,7 @@ func (project *Project) RootFolder() (Folder, error) {
 	return gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = '.'", project.ID).
 		Preload("Nested", nil).
+		Preload("Images", nil).
 		First(ctx)
 }
 

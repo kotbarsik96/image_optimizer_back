@@ -77,7 +77,7 @@ func UploadProjectImages(
 
 		hash := Md5(time.Now().String())
 		filenameHashed := fmt.Sprintf(`%v_%v`, filename, hash)
-		key := path.Join(os.Getenv("PROJECT_NAME"), uploader.Uuid)
+		key := path.Join(os.Getenv("PROJECT_NAME"), uploader.Uuid, "projects")
 		if folder.Path != "." {
 			key = path.Join(key, folder.Path)
 		}
