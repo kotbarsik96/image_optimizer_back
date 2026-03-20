@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 func Md5(s string) string {
@@ -54,4 +55,8 @@ func FilterSlice[V any](slice []V, filterFunc func(index int, item V, slice []V)
 		}
 	}
 	return newSlice
+}
+
+func GetCurrentFormattedTime() string {
+	return time.Now().Format(time.DateTime)
 }

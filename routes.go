@@ -44,15 +44,12 @@ func RouteNewProject(c *gin.Context) {
 
 	title := strings.TrimSpace(c.PostForm("title"))
 	if title == "" {
-		RespondError(c, Response{
-			Error: ErrBadRequest("Invalid project name", nil),
-		})
-		return
+		title = GetCurrentFormattedTime()
 	}
 
 	project := Project{
 		UploaderID: uploader.ID,
-		Title:      c.PostForm("title"),
+		Title:      title,
 	}
 	err := gorm.G[Project](gormDb).Create(ctx, &project)
 
@@ -91,24 +88,26 @@ func RouteNewProject(c *gin.Context) {
 func RouteGetProject(c *gin.Context) {
 	project := c.MustGet("project").(Project)
 
-	rootFolder, err := project.RootFolder()
+	rootFolder, err := project.GetRootFolder()
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get project folder", err),
 		})
 		return
 	}
+	project.RootFolder = &rootFolder
 
-	prPreview := ProjectPreview{
-		ID:         project.ID,
-		CreatedAt:  project.CreatedAt,
-		UpdatedAt:  project.UpdatedAt,
-		RootFolder: rootFolder,
-		Title:      project.Title,
+	optimizations, err := project.GetOptimizations()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get optimizations", err),
+		})
+		return
 	}
+	project.Optimizations = optimizations
 
 	RespondOk(c, Response{
-		Data: prPreview,
+		Data: project,
 	})
 }
 
@@ -125,7 +124,7 @@ func RouteDeleteProject(c *gin.Context) {
 	}
 
 	RespondOk(c, Response{
-		Message: fmt.Sprintf(`Project "%v" was deleted`, project.Title),
+		Message: fmt.Sprintf(`Project %v was deleted`, project.Title),
 	})
 }
 
@@ -416,5 +415,158 @@ func RouteRenameImage(c *gin.Context) {
 		Data: gin.H{
 			"image": img,
 		},
+	})
+}
+
+// optimizations
+
+func RouteGetOptimization(c *gin.Context) {
+	optimization := c.MustGet("optimization").(Optimization)
+
+	rootFolder, err := optimization.GetRootFolder()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get optimization folder", err),
+		})
+		return
+	}
+	optimization.RootFolder = rootFolder
+
+	RespondOk(c, Response{
+		Data: optimization,
+	})
+}
+
+func RouteDeleteOptimization(c *gin.Context) {
+	optimization := c.MustGet("optimization").(Optimization)
+
+	err := optimization.Delete()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not delete optimization", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Optimization %v was deleted", optimization.Title),
+	})
+}
+
+func RouteGetOptimizationsList(c *gin.Context) {
+	ctx := context.Background()
+
+	project := c.MustGet("project").(Project)
+
+	optimizations, err := gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(ctx)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get optimizations", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Data: optimizations,
+	})
+}
+
+func RouteStartOptimization(c *gin.Context) {
+	ctx := context.Background()
+
+	project := c.MustGet("project").(Project)
+
+	// строка в формате "png|webp|avif" или "avif"; каждое из значений должно быть среди ESupportedOptimizationExtensions
+	extensionsString := c.PostForm("extensions")
+	// строка в формате "25|50|75" или "50"; каждое число не может быть меньше MinOptimizationPercent и больше MaxOptimizationPercent
+	sizesString := c.PostForm("sizes")
+
+	extensions, err := GetOptimizationExtensions(extensionsString)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(err.Error(), nil),
+		})
+		return
+	}
+
+	sizes, err := GetOptimizationSizes(sizesString)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrBadRequest(err.Error(), nil),
+		})
+		return
+	}
+
+	// temp
+	fmt.Println(extensions)
+	fmt.Println(sizes)
+	// temp ^
+
+	title := strings.TrimSpace(c.PostForm("title"))
+	if title == "" {
+		title = GetCurrentFormattedTime()
+	}
+
+	opt := Optimization{
+		ProjectID:  project.ID,
+		Title:      title,
+		Extensions: extensionsString,
+		Sizes:      sizesString,
+	}
+
+	err = gorm.G[Optimization](gormDb).Create(ctx, &opt)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not save optimization", err),
+		})
+		return
+	}
+
+	err = opt.Start()
+
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not start optimization", err),
+		})
+		return
+	}
+
+	RespondCreated(c, Response{
+		Message: "Optimization started",
+		Data:    opt,
+	})
+}
+
+func RouteRenameOptimization(c *gin.Context) {
+	ctx := context.Background()
+
+	project := c.MustGet("project").(Project)
+	optimization := c.MustGet("optimization").(Optimization)
+
+	newTitle := strings.TrimSpace(c.PostForm("title"))
+	existingOpt, err := gorm.G[Optimization](gormDb).
+		Where("title = ? AND project_id = ?", newTitle, project.ID).
+		First(ctx)
+	if err == nil && existingOpt.Title == newTitle {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				fmt.Sprintf("Optimization %v already exists", existingOpt.Title),
+				nil),
+		})
+		return
+	}
+
+	optimization.Title = newTitle
+	gormDb.Save(&optimization)
+	if optimization.Title != newTitle {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not save optimization", err),
+		})
+		return
+	}
+
+	RespondOk(c, Response{
+		Message: fmt.Sprintf("Optimization title set to %v", optimization.Title),
+		Data:    optimization,
 	})
 }

@@ -9,15 +9,17 @@ import (
 )
 
 type Project struct {
-	ID         uint      `gorm:"primarykey" json:"id"`
-	UploaderID uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"uploader_id,omitzero"`
-	Folders    []Folder  `json:"folders,omitzero"`
-	Title      string    `json:"title,omitzero"`
-	CreatedAt  time.Time `json:"created_at,omitzero"`
-	UpdatedAt  time.Time `json:"updated_at,omitzero"`
+	ID            uint           `gorm:"primarykey" json:"id"`
+	UploaderID    uint           `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"uploader_id,omitzero"`
+	Folders       []Folder       `json:"folders,omitzero"`
+	Optimizations []Optimization `json:"optimizations,omitzero"`
+	Title         string         `json:"title,omitzero"`
+	RootFolder    *Folder        `gorm:"-" json:"root_folder,omitzero"`
+	CreatedAt     time.Time      `json:"created_at,omitzero"`
+	UpdatedAt     time.Time      `json:"updated_at,omitzero"`
 }
 
-func (project *Project) RootFolder() (Folder, error) {
+func (project *Project) GetRootFolder() (Folder, error) {
 	ctx := context.Background()
 	return gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = '.'", project.ID).
@@ -30,7 +32,7 @@ func (project *Project) RootFolder() (Folder, error) {
 func (project *Project) Delete() error {
 	ctx := context.Background()
 
-	rootFolder, err := project.RootFolder()
+	rootFolder, err := project.GetRootFolder()
 	if err != nil {
 		log.Printf("Project %v's root folder not found: %v", project.Title, err)
 	}
@@ -43,6 +45,10 @@ func (project *Project) Delete() error {
 	_, err = gorm.G[Project](gormDb).Where("id = ?", project.ID).Delete(ctx)
 
 	return err
+}
+
+func (project *Project) GetOptimizations() ([]Optimization, error) {
+	return gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(context.Background())
 }
 
 type ProjectPreview struct {

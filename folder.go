@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
@@ -14,8 +13,6 @@ import (
 )
 
 var foldernameRegExp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
-
-var ErrCannotDeleteRootFolder = errors.New("Cannot delete root folder")
 
 type Folder struct {
 	ID             uint      `gorm:"primarykey" json:"id"`

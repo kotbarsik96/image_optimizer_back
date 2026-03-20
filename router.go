@@ -52,4 +52,13 @@ func ListRoutes() {
 		images.DELETE("/:image_id", ProjectImageAuthMiddleware(), RouteDeleteImage)
 		images.POST("/rename/:image_id", ProjectImageAuthMiddleware(), RouteRenameImage)
 	}
+
+	optimizations := router.Group("/optimizations", AuthMiddleware())
+	{
+		optimizations.GET("/:optimization_id", OptimizationAuthMiddleware(), RouteGetOptimization)
+		optimizations.DELETE("/:optimization_id", OptimizationAuthMiddleware(), RouteDeleteOptimization)
+		optimizations.GET("/list/:project_id", ProjectAuthMiddleware(), RouteGetOptimizationsList)
+		optimizations.POST("/start/:project_id", ProjectAuthMiddleware(), RouteStartOptimization)
+		optimizations.POST("/rename/:optimization_id", OptimizationAuthMiddleware(), RouteRenameOptimization)
+	}
 }

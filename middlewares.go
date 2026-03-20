@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -183,6 +184,57 @@ func ProjectImageAuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set("image", image)
+
+		c.Next()
+	}
+}
+
+func OptimizationAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := context.Background()
+
+		uploader := c.MustGet("uploader").(Uploader)
+
+		optimizationId, _ := strconv.Atoi(c.Param("optimization_id"))
+		opt, err := gorm.G[Optimization](gormDb).Where("id = ?", optimizationId).First(ctx)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(
+					http.StatusNotFound,
+					ErrNotFound("Optimization not found", err))
+			} else {
+				c.AbortWithStatusJSON(
+					http.StatusInternalServerError,
+					ErrInternal("", err))
+			}
+
+			return
+		}
+
+		project, err := gorm.G[Project](gormDb).Where("id = ?", opt.ProjectID).First(ctx)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(
+					http.StatusBadRequest,
+					ErrBadRequest(
+						fmt.Sprintf("Optimization %v is not related to any project", opt.Title),
+						err))
+			} else {
+				c.AbortWithStatusJSON(
+					http.StatusInternalServerError,
+					ErrInternal("", err))
+			}
+
+			return
+		}
+
+		if project.UploaderID != uploader.ID {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, ErrUnauthorized("", nil))
+			return
+		}
+
+		c.Set("project", project)
+		c.Set("optimization", opt)
 
 		c.Next()
 	}
