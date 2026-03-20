@@ -22,7 +22,7 @@ type Folder struct {
 	ProjectID      *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
 	OptimizationID *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
 	Path           string    `json:"path,omitzero"`
-	ParentID       *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id"`
+	ParentID       *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id,omitzero"`
 	Nested         []Folder  `gorm:"foreignKey:ParentID" json:"nested,omitzero"`
 	Images         []Image   `json:"images,omitzero"`
 	CreatedAt      time.Time `json:"created_at,omitzero"`
@@ -33,6 +33,7 @@ func (folder *Folder) GetNested(ctx context.Context) ([]Folder, error) {
 	return gorm.G[Folder](gormDb).Where("parent_id = ?", folder.ID).Find(ctx)
 }
 
+// удалить папку, изображения и все вложенные папки и изображения. Не удаляет корневую папку (Path == ".")
 func (folder *Folder) Delete() error {
 	if folder.Path == "." {
 		return ErrCannotDeleteRootFolder
@@ -41,6 +42,7 @@ func (folder *Folder) Delete() error {
 	return folder.DeleteEvenIfRoot()
 }
 
+// то же, что Folder.Delete, но может удалять и корневые папки (Path == ".")
 func (folder *Folder) DeleteEvenIfRoot() error {
 	ctx := context.Background()
 

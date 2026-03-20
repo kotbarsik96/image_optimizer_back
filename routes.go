@@ -260,12 +260,10 @@ func RouteRenameFolder(c *gin.Context) {
 }
 
 func RouteDeleteProject(c *gin.Context) {
-	ctx := context.Background()
 	project := c.MustGet("project").(Project)
 
-	_, err := gorm.G[Project](gormDb).
-		Where("id = ?", project.ID).
-		Delete(ctx)
+	err := project.Delete()
+
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not delete project", err),

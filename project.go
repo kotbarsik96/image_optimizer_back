@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,6 +23,25 @@ func (project *Project) RootFolder() (Folder, error) {
 		Where("project_id = ? AND path = '.'", project.ID).
 		Preload("Nested", nil).
 		First(ctx)
+}
+
+// удалить проект и корневую папку. Удалит все связанные с проектом папки и изображения
+func (project *Project) Delete() error {
+	ctx := context.Background()
+
+	rootFolder, err := project.RootFolder()
+	if err != nil {
+		log.Printf("Project %v's root folder not found: %v", project.Title, err)
+	}
+
+	err = rootFolder.DeleteEvenIfRoot()
+	if err != nil {
+		log.Printf("Could not delete project %v's root folder: %v", project.Title, err)
+	}
+
+	_, err = gorm.G[Project](gormDb).Where("id = ?", project.ID).Delete(ctx)
+
+	return err
 }
 
 type ProjectPreview struct {

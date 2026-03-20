@@ -16,20 +16,25 @@ type Response struct {
 	Error   *AppError `json:"error,omitempty"`
 }
 
+func RespondOkWithCode(c *gin.Context, response Response, statusCode int) {
+	r := gin.H{
+		"ok": true,
+	}
+	if response.Data != nil {
+		r["data"] = response.Data
+	}
+	if response.Message != "" {
+		r["message"] = response.Message
+	}
+	c.JSON(statusCode, r)
+}
+
 func RespondOk(c *gin.Context, response Response) {
-	c.JSON(http.StatusOK, gin.H{
-		"ok":      true,
-		"message": response.Message,
-		"data":    response.Data,
-	})
+	RespondOkWithCode(c, response, http.StatusOK)
 }
 
 func RespondCreated(c *gin.Context, response Response) {
-	c.JSON(http.StatusCreated, gin.H{
-		"ok":      true,
-		"message": response.Message,
-		"data":    response.Data,
-	})
+	RespondOkWithCode(c, response, http.StatusCreated)
 }
 
 func RespondError(c *gin.Context, response Response) {
