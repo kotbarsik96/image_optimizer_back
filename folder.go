@@ -31,25 +31,23 @@ func (folder *Folder) GetNested(ctx context.Context) ([]Folder, error) {
 }
 
 // удалить папку, изображения и все вложенные папки и изображения. Не удаляет корневую папку (Path == ".")
-func (folder *Folder) Delete() error {
+func (folder *Folder) Delete(ctx context.Context) error {
 	if folder.Path == "." {
 		return ErrCannotDeleteRootFolder
 	}
 
-	return folder.DeleteEvenIfRoot()
+	return folder.DeleteEvenIfRoot(ctx)
 }
 
 // то же, что Folder.Delete, но может удалять и корневые папки (Path == ".")
-func (folder *Folder) DeleteEvenIfRoot() error {
-	ctx := context.Background()
-
+func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	nestedFolders, err := folder.GetNested(ctx)
 	if err != nil {
 		log.Printf("Could not get nested folders of %v to delete: %v", folder.Path, err)
 	}
 
 	for _, nestedFolder := range nestedFolders {
-		err := nestedFolder.Delete()
+		err := nestedFolder.Delete(ctx)
 		if err != nil {
 			log.Printf("Could not delete nested folder of %v (%v): %v", folder.Path, nestedFolder.Path, err)
 		}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -46,7 +45,7 @@ func ErrorMiddleware() gin.HandlerFunc {
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		session := sessions.Default(c)
 
@@ -79,9 +78,11 @@ func AuthMiddleware() gin.HandlerFunc {
 
 func ProjectAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
 		uploader := c.MustGet("uploader").(Uploader)
 		projectId, _ := strconv.Atoi(c.Param("project_id"))
-		project, err := gorm.G[Project](gormDb).Where("id = ?", projectId).First(context.Background())
+		project, err := gorm.G[Project](gormDb).Where("id = ?", projectId).First(ctx)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.AbortWithStatusJSON(
@@ -112,7 +113,7 @@ func ProjectAuthMiddleware() gin.HandlerFunc {
 
 func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		uploader := c.MustGet("uploader").(Uploader)
 
@@ -153,7 +154,7 @@ func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 
 func ProjectImageAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		uploader := c.MustGet("uploader").(Uploader)
 		imageId, _ := strconv.Atoi(c.Param("image_id"))
@@ -191,7 +192,7 @@ func ProjectImageAuthMiddleware() gin.HandlerFunc {
 
 func OptimizationAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := context.Background()
+		ctx := c.Request.Context()
 
 		uploader := c.MustGet("uploader").(Uploader)
 

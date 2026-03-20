@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path"
@@ -38,7 +37,7 @@ func RouteGetProjectsList(c *gin.Context) {
 }
 
 func RouteNewProject(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	uploader := c.MustGet("uploader").(Uploader)
 
@@ -74,7 +73,7 @@ func RouteNewProject(c *gin.Context) {
 
 	form, _ := c.MultipartForm()
 	images := form.File["images"]
-	responseData := UploadProjectImages(uploader, folder, images)
+	responseData := UploadProjectImages(ctx, uploader, folder, images)
 
 	RespondCreated(c, Response{
 		Data: gin.H{
@@ -86,9 +85,11 @@ func RouteNewProject(c *gin.Context) {
 }
 
 func RouteGetProject(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	project := c.MustGet("project").(Project)
 
-	rootFolder, err := project.GetRootFolder()
+	rootFolder, err := project.GetRootFolder(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get project folder", err),
@@ -97,7 +98,7 @@ func RouteGetProject(c *gin.Context) {
 	}
 	project.RootFolder = &rootFolder
 
-	optimizations, err := project.GetOptimizations()
+	optimizations, err := project.GetOptimizations(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get optimizations", err),
@@ -112,9 +113,11 @@ func RouteGetProject(c *gin.Context) {
 }
 
 func RouteDeleteProject(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	project := c.MustGet("project").(Project)
 
-	err := project.Delete()
+	err := project.Delete(ctx)
 
 	if err != nil {
 		RespondError(c, Response{
@@ -129,7 +132,7 @@ func RouteDeleteProject(c *gin.Context) {
 }
 
 func RouteRenameProject(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	uploader := c.MustGet("uploader").(Uploader)
 	project := c.MustGet("project").(Project)
@@ -165,7 +168,7 @@ func RouteRenameProject(c *gin.Context) {
 // folders
 
 func RouteGetFolder(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	folder := c.MustGet("folder").(Folder)
 	images, imagesErr := gorm.G[Image](gormDb).
@@ -198,7 +201,7 @@ func RouteGetFolder(c *gin.Context) {
 }
 
 func RouteNewFolder(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	uploader := c.MustGet("uploader").(Uploader)
 
@@ -255,6 +258,8 @@ func RouteNewFolder(c *gin.Context) {
 }
 
 func RouteDeleteFolder(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	folder := c.MustGet("folder").(Folder)
 
 	if folder.Path == "." {
@@ -264,7 +269,7 @@ func RouteDeleteFolder(c *gin.Context) {
 		return
 	}
 
-	err := folder.Delete()
+	err := folder.Delete(ctx)
 	if err != nil {
 		if errors.Is(err, ErrCannotDeleteRootFolder) {
 			RespondError(c, Response{
@@ -284,12 +289,14 @@ func RouteDeleteFolder(c *gin.Context) {
 }
 
 func RouteUploadFiles(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
 
 	form, _ := c.MultipartForm()
 	images := form.File["images"]
-	responseData := UploadProjectImages(uploader, folder, images)
+	responseData := UploadProjectImages(ctx, uploader, folder, images)
 
 	RespondCreated(c, Response{
 		Data: gin.H{
@@ -300,7 +307,7 @@ func RouteUploadFiles(c *gin.Context) {
 }
 
 func RouteRenameFolder(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	folder := c.MustGet("folder").(Folder)
 
@@ -359,8 +366,10 @@ func RouteRenameFolder(c *gin.Context) {
 // images
 
 func RouteDeleteImage(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	image := c.MustGet("image").(Image)
-	err := image.Delete()
+	err := image.Delete(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not delete image", err),
@@ -374,7 +383,7 @@ func RouteDeleteImage(c *gin.Context) {
 }
 
 func RouteRenameImage(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	img := c.MustGet("image").(Image)
 	folder, err := gorm.G[Folder](gormDb).
@@ -421,9 +430,11 @@ func RouteRenameImage(c *gin.Context) {
 // optimizations
 
 func RouteGetOptimization(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	optimization := c.MustGet("optimization").(Optimization)
 
-	rootFolder, err := optimization.GetRootFolder()
+	rootFolder, err := optimization.GetRootFolder(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get optimization folder", err),
@@ -438,9 +449,11 @@ func RouteGetOptimization(c *gin.Context) {
 }
 
 func RouteDeleteOptimization(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	optimization := c.MustGet("optimization").(Optimization)
 
-	err := optimization.Delete()
+	err := optimization.Delete(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not delete optimization", err),
@@ -454,7 +467,7 @@ func RouteDeleteOptimization(c *gin.Context) {
 }
 
 func RouteGetOptimizationsList(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	project := c.MustGet("project").(Project)
 
@@ -472,7 +485,7 @@ func RouteGetOptimizationsList(c *gin.Context) {
 }
 
 func RouteStartOptimization(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	project := c.MustGet("project").(Project)
 
@@ -538,7 +551,7 @@ func RouteStartOptimization(c *gin.Context) {
 }
 
 func RouteRenameOptimization(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	project := c.MustGet("project").(Project)
 	optimization := c.MustGet("optimization").(Optimization)

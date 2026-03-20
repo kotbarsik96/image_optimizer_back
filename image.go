@@ -33,9 +33,7 @@ func (image *Image) GetUrl() string {
 	return (fmt.Sprintf("%v/%v", image.S3Url, url.PathEscape(path.Join(image.Bucket, image.Key))))
 }
 
-func (image *Image) Delete() error {
-	ctx := context.Background()
-
+func (image *Image) Delete(ctx context.Context) error {
 	err := s3Actions.DeleteFiles(ctx, image.Bucket, []string{image.Key})
 	if err != nil {
 		log.Printf("Could not delete images from S3: %v", err)
@@ -51,6 +49,7 @@ type UploadData struct {
 }
 
 func UploadProjectImages(
+	ctx context.Context,
 	uploader Uploader,
 	folder Folder,
 	images []*multipart.FileHeader,
@@ -58,8 +57,6 @@ func UploadProjectImages(
 	responseData := []UploadData{}
 
 	for _, imgFileHeader := range images {
-		ctx := context.Background()
-
 		data := UploadData{}
 
 		file, err := imgFileHeader.Open()
@@ -83,7 +80,7 @@ func UploadProjectImages(
 		}
 		key = path.Join(key, fmt.Sprintf("%v.%v", filenameHashed, extension))
 
-		_, err = s3Actions.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
+		_, err = s3Actions.UploadFile(ctx, s3Bucket, key, file, "image/"+extension)
 
 		file.Close()
 

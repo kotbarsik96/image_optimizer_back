@@ -19,8 +19,7 @@ type Project struct {
 	UpdatedAt     time.Time      `json:"updated_at,omitzero"`
 }
 
-func (project *Project) GetRootFolder() (Folder, error) {
-	ctx := context.Background()
+func (project *Project) GetRootFolder(ctx context.Context) (Folder, error) {
 	return gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = '.'", project.ID).
 		Preload("Nested", nil).
@@ -29,15 +28,13 @@ func (project *Project) GetRootFolder() (Folder, error) {
 }
 
 // удалить проект и корневую папку. Удалит все связанные с проектом папки и изображения
-func (project *Project) Delete() error {
-	ctx := context.Background()
-
-	rootFolder, err := project.GetRootFolder()
+func (project *Project) Delete(ctx context.Context) error {
+	rootFolder, err := project.GetRootFolder(ctx)
 	if err != nil {
 		log.Printf("Project %v's root folder not found: %v", project.Title, err)
 	}
 
-	err = rootFolder.DeleteEvenIfRoot()
+	err = rootFolder.DeleteEvenIfRoot(ctx)
 	if err != nil {
 		log.Printf("Could not delete project %v's root folder: %v", project.Title, err)
 	}
@@ -47,8 +44,8 @@ func (project *Project) Delete() error {
 	return err
 }
 
-func (project *Project) GetOptimizations() ([]Optimization, error) {
-	return gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(context.Background())
+func (project *Project) GetOptimizations(ctx context.Context) ([]Optimization, error) {
+	return gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(ctx)
 }
 
 type ProjectPreview struct {

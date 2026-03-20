@@ -34,8 +34,7 @@ type Optimization struct {
 	UpdatedAt  time.Time `json:"updated_at,omitzero"`
 }
 
-func (opt *Optimization) GetRootFolder() (Folder, error) {
-	ctx := context.Background()
+func (opt *Optimization) GetRootFolder(ctx context.Context) (Folder, error) {
 	return gorm.G[Folder](gormDb).
 		Where("optimization_id = ? AND path = '.'", opt.ID).
 		Preload("Nested", nil).
@@ -78,15 +77,13 @@ func GetOptimizationSizes(sizesRaw string) ([]int, error) {
 }
 
 // удалить оптимизацию и корневую папку. Удалит все связанные с оптимизацией папки и изображения
-func (optimization *Optimization) Delete() error {
-	ctx := context.Background()
-
-	rootFolder, err := optimization.GetRootFolder()
+func (optimization *Optimization) Delete(ctx context.Context) error {
+	rootFolder, err := optimization.GetRootFolder(ctx)
 	if err != nil {
 		log.Printf("Optimization %v's root folder not found: %v", optimization.Title, err)
 	}
 
-	err = rootFolder.DeleteEvenIfRoot()
+	err = rootFolder.DeleteEvenIfRoot(ctx)
 	if err != nil {
 		log.Printf("Could not delete optimization %v's root folder: %v", optimization.Title, err)
 	}
