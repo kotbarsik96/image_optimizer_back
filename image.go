@@ -45,14 +45,9 @@ func (image *Image) Delete() error {
 	return err
 }
 
-type ImageWithUrl struct {
-	Image
-	Url string `json:"url"`
-}
-
 type UploadData struct {
-	Err   error        `json:"error"`
-	Image ImageWithUrl `json:"image"`
+	Err   error `json:"error"`
+	Image Image `json:"image"`
 }
 
 func UploadProjectImages(
@@ -78,13 +73,15 @@ func UploadProjectImages(
 		s3Url := os.Getenv("S3_ENDPOINT_URL")
 		s3Bucket := os.Getenv("S3_BUCKET")
 
+		filename := GetFilenameWithoutExtension(imgFileHeader.Filename)
+
 		hash := Md5(time.Now().String())
-		filename := fmt.Sprintf(`%v_%v`, GetFilenameWithoutExtension(imgFileHeader.Filename), hash)
+		filenameHashed := fmt.Sprintf(`%v_%v`, filename, hash)
 		key := path.Join(os.Getenv("PROJECT_NAME"), uploader.Uuid)
 		if folder.Path != "." {
 			key = path.Join(key, folder.Path)
 		}
-		key = path.Join(key, fmt.Sprintf("%v.%v", filename, extension))
+		key = path.Join(key, fmt.Sprintf("%v.%v", filenameHashed, extension))
 
 		_, err = s3Actions.UploadFile(context.Background(), s3Bucket, key, file, "image/"+extension)
 
@@ -105,10 +102,7 @@ func UploadProjectImages(
 			if err != nil {
 				data.Err = err
 			} else {
-				data.Image = ImageWithUrl{
-					Image: img,
-					Url:   img.GetUrl(),
-				}
+				data.Image = img
 			}
 		} else {
 			data.Err = err
@@ -121,6 +115,11 @@ func UploadProjectImages(
 }
 
 func (image *Image) AfterFind(tx *gorm.DB) (err error) {
+	image.Url = image.GetUrl()
+	return
+}
+
+func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	image.Url = image.GetUrl()
 	return
 }
