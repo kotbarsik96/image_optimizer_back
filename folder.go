@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
-	"path"
 	"regexp"
 	"time"
 
@@ -16,37 +15,45 @@ import (
 
 var foldernameRegExp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
 
+var ErrCannotDeleteRootFolder = errors.New("Cannot delete root folder")
+
 type Folder struct {
 	ID             uint      `gorm:"primarykey" json:"id"`
-	ProjectID      uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
-	OptimizationID uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
+	ProjectID      *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
+	OptimizationID *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
 	Path           string    `json:"path,omitzero"`
-	Nested         []Folder  `gorm:"-" json:"nested,omitzero"`
+	ParentID       *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id"`
+	Nested         []Folder  `gorm:"foreignKey:ParentID" json:"nested,omitzero"`
 	Images         []Image   `json:"images,omitzero"`
 	CreatedAt      time.Time `json:"created_at,omitzero"`
 	UpdatedAt      time.Time `json:"updated_at,omitzero"`
 }
 
-func (folder *Folder) GetNested() []Folder {
-	ctx := context.Background()
-
-	folders, _ := gorm.G[Folder](gormDb).
-		Select("id", "path", "created_at", "updated_at").
-		Where("project_id = ? AND id != ?", folder.ProjectID, folder.ID).
-		Find(ctx)
-
-	folders = FilterSlice(folders, func(index int, item Folder, slice []Folder) bool {
-		return folder.Path == path.Dir(item.Path)
-	})
-
-	return folders
+func (folder *Folder) GetNested(ctx context.Context) ([]Folder, error) {
+	return gorm.G[Folder](gormDb).Where("parent_id = ?", folder.ID).Find(ctx)
 }
 
 func (folder *Folder) Delete() error {
+	if folder.Path == "." {
+		return ErrCannotDeleteRootFolder
+	}
+
+	return folder.DeleteEvenIfRoot()
+}
+
+func (folder *Folder) DeleteEvenIfRoot() error {
 	ctx := context.Background()
 
-	if folder.Path == "." {
-		return fmt.Errorf("Cannot delete root folder")
+	nestedFolders, err := folder.GetNested(ctx)
+	if err != nil {
+		log.Printf("Could not get nested folders of %v to delete: %v", folder.Path, err)
+	}
+
+	for _, nestedFolder := range nestedFolders {
+		err := nestedFolder.Delete()
+		if err != nil {
+			log.Printf("Could not delete nested folder of %v (%v): %v", folder.Path, nestedFolder.Path, err)
+		}
 	}
 
 	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)

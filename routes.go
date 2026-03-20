@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strconv"
@@ -44,7 +45,6 @@ func RouteGetProject(c *gin.Context) {
 		})
 		return
 	}
-	rootFolder.Nested = rootFolder.GetNested()
 
 	prPreview := ProjectPreview{
 		ID:         project.ID,
@@ -86,7 +86,7 @@ func RouteNewProject(c *gin.Context) {
 	}
 
 	folder := Folder{
-		ProjectID: project.ID,
+		ProjectID: &project.ID,
 		Path:      ".",
 	}
 	err = gorm.G[Folder](gormDb).Create(ctx, &folder)
@@ -176,7 +176,8 @@ func RouteNewFolder(c *gin.Context) {
 
 	newFolder := Folder{
 		Path:      newFolderPath,
-		ProjectID: project.ID,
+		ProjectID: &project.ID,
+		ParentID:  &parentFolder.ID,
 	}
 	gormDb.Save(&newFolder)
 
@@ -281,19 +282,26 @@ func RouteGetFolder(c *gin.Context) {
 	ctx := context.Background()
 
 	folder := c.MustGet("folder").(Folder)
-	images, err := gorm.G[Image](gormDb).
+	images, imagesErr := gorm.G[Image](gormDb).
 		Where("folder_id = ?", folder.ID).
 		Find(ctx)
 	folder.Images = images
-	folder.Nested = folder.GetNested()
 
-	if err != nil {
+	nestedFolders, nestedFoldersErr := folder.GetNested(ctx)
+	folder.Nested = nestedFolders
+
+	if imagesErr != nil || nestedFoldersErr != nil {
+		var msg string
+		if imagesErr != nil && nestedFoldersErr != nil {
+			msg = "Could not contents of folder"
+		} else if imagesErr != nil {
+			msg = "Could not images"
+		} else if nestedFoldersErr != nil {
+			msg = "Could not get folders"
+		}
+
 		RespondError(c, Response{
-			Error: ErrInternal(
-				fmt.Sprintf("Could not retrieve images for folder %v", folder.Path),
-				err,
-			),
-			Data: folder,
+			Error: ErrInternal(msg, fmt.Errorf("%v and %v", imagesErr, nestedFoldersErr)),
 		})
 		return
 	}
@@ -315,9 +323,15 @@ func RouteDeleteFolder(c *gin.Context) {
 
 	err := folder.Delete()
 	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not delete folder", err),
-		})
+		if errors.Is(err, ErrCannotDeleteRootFolder) {
+			RespondError(c, Response{
+				Error: ErrBadRequest(err.Error(), nil),
+			})
+		} else {
+			RespondError(c, Response{
+				Error: ErrInternal("Could not delete folder", err),
+			})
+		}
 		return
 	}
 

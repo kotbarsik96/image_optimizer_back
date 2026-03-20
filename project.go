@@ -20,6 +20,7 @@ func (project *Project) RootFolder() (Folder, error) {
 	ctx := context.Background()
 	return gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = '.'", project.ID).
+		Preload("Nested", nil).
 		First(ctx)
 }
 
