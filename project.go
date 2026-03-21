@@ -47,11 +47,3 @@ func (project *Project) Delete(ctx context.Context) error {
 func (project *Project) GetOptimizations(ctx context.Context) ([]Optimization, error) {
 	return gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(ctx)
 }
-
-type ProjectPreview struct {
-	ID         uint      `json:"id,omitzero"`
-	CreatedAt  time.Time `json:"created_at,omitzero"`
-	UpdatedAt  time.Time `json:"updated_at,omitzero"`
-	RootFolder Folder    `json:"root_folder"`
-	Title      string    `json:"title"`
-}

@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,21 +15,19 @@ import (
 // projects
 
 func RouteGetProjectsList(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	uploader := c.MustGet("uploader").(Uploader)
 
-	projects := []struct {
-		// Optimizations []Optimization
-		ID        uint
-		Title     string
-		CreatedAt time.Time
-		UpdatedAt time.Time
-	}{}
-
-	gormDb.
-		Table("projects").
-		Select("id", "title", "created_at", "updated_at").
+	projects, err := gorm.G[Project](gormDb).
 		Where("uploader_id = ?", uploader.ID).
-		Find(&projects)
+		Find(ctx)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get projects", err),
+		})
+		return
+	}
 
 	RespondOk(c, Response{
 		Data: projects,
@@ -405,12 +403,12 @@ func RouteRenameImage(c *gin.Context) {
 	}
 
 	existingImage, err := gorm.G[Image](gormDb).
-		Where("folder_id = ? AND filename = ?", folder.ID, newName).
+		Where("folder_id = ? AND filename = ? AND extension = ?", folder.ID, newName, img.Extension).
 		First(ctx)
 	if err == nil && existingImage.Filename == newName {
 		RespondError(c, Response{
 			Error: ErrBadRequest(
-				fmt.Sprintf("Image %v already exists in folder %v", existingImage.Filename, folder.Path),
+				fmt.Sprintf("Image %v.%v already exists in folder %v", existingImage.Filename, existingImage.Extension, folder.Path),
 				nil),
 		})
 		return
@@ -544,10 +542,12 @@ func RouteStartOptimization(c *gin.Context) {
 		return
 	}
 
-	RespondCreated(c, Response{
-		Message: "Optimization started",
-		Data:    opt,
-	})
+	RespondOkWithCode(
+		c,
+		Response{
+			Message: "Optimization started",
+		},
+		http.StatusAccepted)
 }
 
 func RouteRenameOptimization(c *gin.Context) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -45,6 +46,19 @@ func RespondError(c *gin.Context, response Response) {
 }
 
 // errors
+
+func ErrorByCurrentEnv(abstractMessage string, err error) error {
+	ce := os.Getenv("CURRENT_ENV")
+
+	switch ce {
+	case "PROD":
+		return errors.New(abstractMessage)
+	case "DEV":
+		return fmt.Errorf("%v: %w", abstractMessage, err)
+	}
+
+	return errors.New(abstractMessage)
+}
 
 type AppError struct {
 	Status int    `json:"-"`

@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"mime/multipart"
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -44,8 +46,8 @@ func (image *Image) Delete(ctx context.Context) error {
 }
 
 type UploadData struct {
-	Err   error `json:"error"`
-	Image Image `json:"image"`
+	Err   string `json:"error"`
+	Image Image  `json:"image"`
 }
 
 func UploadProjectImages(
@@ -61,11 +63,11 @@ func UploadProjectImages(
 
 		file, err := imgFileHeader.Open()
 		if err != nil {
-			data.Err = err
+			data.Err = ErrorByCurrentEnv("Could not open image file", err).Error()
 			continue
 		}
 
-		extension := path.Ext(imgFileHeader.Filename)[1:]
+		extension := strings.ToLower(path.Ext(imgFileHeader.Filename))[1:]
 
 		s3Url := os.Getenv("S3_ENDPOINT_URL")
 		s3Bucket := os.Getenv("S3_BUCKET")
@@ -84,6 +86,14 @@ func UploadProjectImages(
 
 		file.Close()
 
+		// если изображение с таким названием уже существует в данной папке - добавить в название хэш
+		_, existsErr := gorm.G[Image](gormDb).
+			Where("folder_id = ? AND filename = ? AND extension = ?", folder.ID, filename, extension).
+			First(ctx)
+		if existsErr == nil || !errors.Is(existsErr, gorm.ErrRecordNotFound) {
+			filename = filenameHashed
+		}
+
 		if err == nil {
 			img := Image{
 				FolderID:  folder.ID,
@@ -97,12 +107,12 @@ func UploadProjectImages(
 			err := gorm.G[Image](gormDb).Create(ctx, &img)
 
 			if err != nil {
-				data.Err = err
+				data.Err = ErrorByCurrentEnv("Could not save image", err).Error()
 			} else {
 				data.Image = img
 			}
 		} else {
-			data.Err = err
+			data.Err = ErrorByCurrentEnv("Could not upload image", err).Error()
 		}
 
 		responseData = append(responseData, data)
