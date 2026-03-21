@@ -2,7 +2,10 @@ package main
 
 import (
 	"os"
+	"strings"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -14,10 +17,22 @@ var store cookie.Store
 func RouterUp() {
 	router = gin.Default()
 
+	RegisterCors()
 	RegisterMiddlewares()
 	ListRoutes()
 
 	router.Run(os.Getenv("PROJECT_URL"))
+}
+
+func RegisterCors() {
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ","),
+		AllowMethods:     strings.Split(os.Getenv("CORS_ALLOWED_METHODS"), ","),
+		AllowHeaders:     strings.Split(os.Getenv("CORS_ALLOWED_HEADERS"), ","),
+		ExposeHeaders:    strings.Split(os.Getenv("CORS_EXPOSE_HEADERS"), ","),
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 }
 
 func RegisterMiddlewares() {
