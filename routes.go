@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"path"
 	"strconv"
@@ -21,6 +22,7 @@ func RouteGetProjectsList(c *gin.Context) {
 
 	projects, err := gorm.G[Project](gormDb).
 		Where("uploader_id = ?", uploader.ID).
+		Order("created_at desc").
 		Find(ctx)
 	if err != nil {
 		RespondError(c, Response{
@@ -69,9 +71,16 @@ func RouteNewProject(c *gin.Context) {
 		return
 	}
 
-	form, _ := c.MultipartForm()
-	images := form.File["images"]
-	responseData := UploadProjectImages(ctx, uploader, folder, images)
+	responseData := []UploadData{}
+	if c.ContentType() == "multipart/form-data" {
+		form, err := c.MultipartForm()
+		if err != nil {
+			log.Printf("Could not get multipart form: %v\n", err)
+		}
+
+		images := form.File["images"]
+		responseData = UploadProjectImages(ctx, uploader, folder, images)
+	}
 
 	RespondCreated(c, Response{
 		Data: gin.H{
@@ -230,6 +239,7 @@ func RouteNewFolder(c *gin.Context) {
 	}
 
 	newFolderPath := path.Join(parentFolder.Path, c.PostForm("name"))
+	fmt.Println(c.PostForm("name"))
 	existingFolder, err := gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = ?", project.ID, newFolderPath).
 		First(ctx)
@@ -251,7 +261,8 @@ func RouteNewFolder(c *gin.Context) {
 	gormDb.Save(&newFolder)
 
 	RespondCreated(c, Response{
-		Data: newFolder,
+		Data:    newFolder,
+		Message: fmt.Sprintf("Folder %v created", newFolder.Path),
 	})
 }
 
@@ -292,9 +303,12 @@ func RouteUploadFiles(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
 
-	form, _ := c.MultipartForm()
-	images := form.File["images"]
-	responseData := UploadProjectImages(ctx, uploader, folder, images)
+	responseData := []UploadData{}
+	if c.ContentType() == "multipart/form-data" {
+		form, _ := c.MultipartForm()
+		images := form.File["images"]
+		responseData = UploadProjectImages(ctx, uploader, folder, images)
+	}
 
 	RespondCreated(c, Response{
 		Data: gin.H{
@@ -533,14 +547,7 @@ func RouteStartOptimization(c *gin.Context) {
 		return
 	}
 
-	err = opt.Start()
-
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not start optimization", err),
-		})
-		return
-	}
+	go opt.Start()
 
 	RespondOkWithCode(
 		c,

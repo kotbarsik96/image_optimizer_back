@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"mime/multipart"
 	"os"
@@ -130,6 +131,37 @@ func (s *S3Actions) DeleteFiles(ctx context.Context, bucket string, keys []strin
 	}
 
 	return err
+}
+
+func (s *S3Actions) DownloadFile(ctx context.Context, bucket, key, destFilepath string) (*os.File, error) {
+	client := s.Client
+
+	result, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer result.Body.Close()
+
+	file, err := os.Create(destFilepath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = file.Write(body)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
 }
 
 func (s *S3Actions) IsAvailable() error {

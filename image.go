@@ -130,3 +130,12 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	image.Url = image.GetUrl()
 	return
 }
+
+func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string) {
+	filename := fmt.Sprintf("%v.%v", image.Filename, image.Extension)
+	_, err := s3Actions.DownloadFile(ctx, image.Bucket, image.Key, path.Join(outputDir, filename))
+	if err != nil {
+		log.Printf("Error while downloading image %v for optimization %v: %v", filename, opt.Title, err)
+		return
+	}
+}

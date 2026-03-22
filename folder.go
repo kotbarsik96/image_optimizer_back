@@ -5,6 +5,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"path"
 	"regexp"
 	"time"
 
@@ -96,4 +97,18 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	}
 
 	return err
+}
+
+func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirname string) {
+	for _, img := range folder.Images {
+		img.Optimize(ctx, opt, path.Join(dirname, folder.Path))
+	}
+
+	nested, err := folder.GetNested(ctx)
+	if err != nil {
+		log.Printf("Could not get nested folders of %v: %v", folder.Path, err)
+	}
+	for _, nestedFolder := range nested {
+		nestedFolder.OptimizeImages(ctx, opt, dirname)
+	}
 }

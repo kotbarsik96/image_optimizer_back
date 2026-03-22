@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -93,6 +95,30 @@ func (optimization *Optimization) Delete(ctx context.Context) error {
 	return err
 }
 
-func (opt *Optimization) Start() error {
-	return nil
+func (opt *Optimization) Start() {
+	ctx := context.Background()
+	project, err := gorm.G[Project](gormDb).Where("id = ?", opt.ProjectID).First(ctx)
+	if err != nil {
+		log.Fatalf("project not found for opt %v: %v\n", opt.ID, err)
+	}
+
+	uploader, err := gorm.G[Uploader](gormDb).Where("id = ?", project.UploaderID).First(ctx)
+	if err != nil {
+		log.Fatalf("uploader not found for project %v: %v\n", project.ID, err)
+	}
+
+	log.Printf("Optimization %v started: %v\n", opt.Title, time.Now().Format(time.TimeOnly))
+
+	dirname := path.Join("_optimizations", uploader.Uuid, opt.Title)
+	err = os.MkdirAll(dirname, 0666)
+	if err != nil {
+		log.Fatalf("Could not create directory %v: %v", dirname, err)
+	}
+
+	rootFolder, err := project.GetRootFolder(ctx)
+	if err != nil {
+		log.Fatalf("Could not get root folder for optimization %v: %v", opt.Title, err)
+	}
+
+	rootFolder.OptimizeImages(ctx, *opt, dirname)
 }
