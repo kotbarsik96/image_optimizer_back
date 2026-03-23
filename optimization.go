@@ -121,4 +121,6 @@ func (opt *Optimization) Start() {
 	}
 
 	rootFolder.OptimizeImages(ctx, *opt, dirname)
+
+	log.Printf("Optimization %v done: %v\n", opt.Title, time.Now().Format(time.TimeOnly))
 }

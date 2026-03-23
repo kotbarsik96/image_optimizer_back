@@ -5,6 +5,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"os"
 	"path"
 	"regexp"
 	"time"
@@ -100,8 +101,18 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 }
 
 func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirname string) {
-	for _, img := range folder.Images {
-		img.Optimize(ctx, opt, path.Join(dirname, folder.Path))
+	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
+	if err != nil {
+		log.Printf("Could not get images of %v: %v", folder.Path, err)
+	}
+
+	for _, img := range images {
+		imgDirname := path.Join(dirname, folder.Path)
+		err := os.MkdirAll(imgDirname, 0666)
+		if err != nil {
+			log.Printf("Could not make folder for %v for image %v.%v: %v", imgDirname, img.Filename, img.Extension, err)
+		}
+		img.Optimize(ctx, opt, imgDirname)
 	}
 
 	nested, err := folder.GetNested(ctx)
