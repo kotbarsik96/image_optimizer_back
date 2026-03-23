@@ -18,17 +18,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// d := path.Join("_optimizations", "test", "optimization_3")
-	// err = os.MkdirAll(d, 0666)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// _, err = os.Create(path.Join(d, "test.txt"))
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	DatabaseUp()
 
 	RouterUp()

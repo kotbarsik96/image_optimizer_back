@@ -442,18 +442,7 @@ func RouteRenameImage(c *gin.Context) {
 // optimizations
 
 func RouteGetOptimization(c *gin.Context) {
-	ctx := c.Request.Context()
-
 	optimization := c.MustGet("optimization").(Optimization)
-
-	rootFolder, err := optimization.GetRootFolder(ctx)
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrInternal("Could not get optimization folder", err),
-		})
-		return
-	}
-	optimization.RootFolder = rootFolder
 
 	RespondOk(c, Response{
 		Data: optimization,
@@ -506,7 +495,7 @@ func RouteStartOptimization(c *gin.Context) {
 	// строка в формате "25|50|75" или "50"; каждое число не может быть меньше MinOptimizationPercent и больше MaxOptimizationPercent
 	sizesString := c.PostForm("sizes")
 
-	extensions, err := GetOptimizationExtensions(extensionsString)
+	_, err := GetOptimizationExtensions(extensionsString)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrBadRequest(err.Error(), nil),
@@ -514,22 +503,29 @@ func RouteStartOptimization(c *gin.Context) {
 		return
 	}
 
-	sizes, err := GetOptimizationSizes(sizesString)
+	_, err = GetOptimizationSizes(sizesString)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrBadRequest(err.Error(), nil),
 		})
 		return
 	}
-
-	// temp
-	fmt.Println(extensions)
-	fmt.Println(sizes)
-	// temp ^
 
 	title := strings.TrimSpace(c.PostForm("title"))
 	if title == "" {
 		title = GetCurrentFormattedTime()
+	}
+
+	existingOpt, err := gorm.G[Optimization](gormDb).
+		Where("project_id = ? AND title = ?", project.ID, title).
+		First(ctx)
+	if err == nil && existingOpt.Title == title {
+		RespondError(c, Response{
+			Error: ErrBadRequest(
+				fmt.Sprintf("Optimization %v already exists", existingOpt.Title),
+				nil),
+		})
+		return
 	}
 
 	opt := Optimization{

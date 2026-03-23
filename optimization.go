@@ -30,18 +30,8 @@ type Optimization struct {
 	Title      string    `json:"title"`
 	Extensions string    `json:"extensions"` // расширения в виде "png|webp|avif" или "png"
 	Sizes      string    `json:"sizes"`      // размеры в процентах: для "25|50|75" будут созданы 3 версии изображения; каждое из указанных чисел не может быть меньше MinOptimizationPercent и больше MaxOptimizationPercent
-	Folders    []Folder  `json:"folders,omitzero"`
-	RootFolder Folder    `gorm:"-" json:"root_folder,omitzero"`
 	CreatedAt  time.Time `json:"created_at,omitzero"`
 	UpdatedAt  time.Time `json:"updated_at,omitzero"`
-}
-
-func (opt *Optimization) GetRootFolder(ctx context.Context) (Folder, error) {
-	return gorm.G[Folder](gormDb).
-		Where("optimization_id = ? AND path = '.'", opt.ID).
-		Preload("Nested", nil).
-		Preload("Images", nil).
-		First(ctx)
 }
 
 func GetOptimizationExtensions(extensionsRaw string) ([]string, error) {
@@ -82,20 +72,8 @@ func GetOptimizationSizes(sizesRaw string) ([]int, error) {
 	return sizes, nil
 }
 
-// удалить оптимизацию и корневую папку. Удалит все связанные с оптимизацией папки и изображения
 func (optimization *Optimization) Delete(ctx context.Context) error {
-	rootFolder, err := optimization.GetRootFolder(ctx)
-	if err != nil {
-		log.Printf("Optimization %v's root folder not found: %v", optimization.Title, err)
-	}
-
-	err = rootFolder.DeleteEvenIfRoot(ctx)
-	if err != nil {
-		log.Printf("Could not delete optimization %v's root folder: %v", optimization.Title, err)
-	}
-
-	_, err = gorm.G[Optimization](gormDb).Where("id = ?", optimization.ID).Delete(ctx)
-
+	_, err := gorm.G[Optimization](gormDb).Where("id = ?", optimization.ID).Delete(ctx)
 	return err
 }
 
@@ -111,7 +89,7 @@ func (opt *Optimization) Start() {
 		log.Fatalf("uploader not found for project %v: %v\n", project.ID, err)
 	}
 
-	log.Printf("Optimization %v started: %v\n", opt.Title, time.Now().Format(time.TimeOnly))
+	log.Printf("Optimization %v started\n", opt.Title)
 
 	dirname := path.Join("_optimizations", uploader.Uuid, opt.Title)
 	err = os.MkdirAll(dirname, 0666)
@@ -126,5 +104,16 @@ func (opt *Optimization) Start() {
 
 	rootFolder.OptimizeImages(ctx, *opt, dirname)
 
-	log.Printf("Optimization %v done: %v\n", opt.Title, time.Now().Format(time.TimeOnly))
+	log.Printf("Optimization %v done\n", opt.Title)
+
+	log.Printf("Archiving optimization %v to zip file\n", opt.Title)
+
+	zipPath := path.Join("_optimizations", uploader.Uuid, opt.Title+".zip")
+	err = ZipDir(dirname, zipPath)
+
+	if err != nil {
+		log.Printf("Could not create zip archive for optimization %v: %v", opt.Title, err)
+	} else {
+		log.Printf("Zip archive created for optimization %v", zipPath)
+	}
 }
