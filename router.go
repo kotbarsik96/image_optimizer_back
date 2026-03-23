@@ -75,5 +75,6 @@ func ListRoutes() {
 		optimizations.GET("/list/:project_id", ProjectAuthMiddleware(), RouteGetOptimizationsList)
 		optimizations.POST("/start/:project_id", ProjectAuthMiddleware(), RouteStartOptimization)
 		optimizations.POST("/rename/:optimization_id", OptimizationAuthMiddleware(), RouteRenameOptimization)
+		optimizations.GET("/archive/:optimization_id", OptimizationAuthMiddleware(), RouteDownloadOptimization)
 	}
 }

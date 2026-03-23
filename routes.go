@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -585,4 +586,20 @@ func RouteRenameOptimization(c *gin.Context) {
 		Message: fmt.Sprintf("Optimization title set to %v", optimization.Title),
 		Data:    optimization,
 	})
+}
+
+func RouteDownloadOptimization(c *gin.Context) {
+	uploader := c.MustGet("uploader").(Uploader)
+	optimization := c.MustGet("optimization").(Optimization)
+
+	zipFilepath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, optimization.Title+".zip")
+	_, err := os.Stat(zipFilepath)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrNotFound("Optimization zip not found", err),
+		})
+		return
+	}
+
+	c.FileAttachment(zipFilepath, optimization.Title+".zip")
 }

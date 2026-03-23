@@ -2,4 +2,4 @@
 .env
 *.db
 sql/*
-_optimizations/*
+resources/*

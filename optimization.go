@@ -91,7 +91,7 @@ func (opt *Optimization) Start() {
 
 	log.Printf("Optimization %v started\n", opt.Title)
 
-	dirname := path.Join("_optimizations", uploader.Uuid, opt.Title)
+	dirname := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, opt.Title)
 	err = os.MkdirAll(dirname, 0666)
 	if err != nil {
 		log.Fatalf("Could not create directory %v: %v", dirname, err)
@@ -108,12 +108,17 @@ func (opt *Optimization) Start() {
 
 	log.Printf("Archiving optimization %v to zip file\n", opt.Title)
 
-	zipPath := path.Join("_optimizations", uploader.Uuid, opt.Title+".zip")
+	zipPath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, opt.Title+".zip")
 	err = ZipDir(dirname, zipPath)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", opt.Title, err)
 	} else {
 		log.Printf("Zip archive created for optimization %v", zipPath)
+	}
+
+	err = os.RemoveAll(dirname)
+	if err != nil {
+		log.Printf("Could not remove temporary dir %v: %v", dirname, err)
 	}
 }

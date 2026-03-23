@@ -30,5 +30,5 @@ func DatabaseUp() {
 func DatabaseMigrate() {
 	migrator := gormDb.Migrator()
 
-	migrator.AutoMigrate(&Uploader{}, &Project{}, &Folder{}, &Image{})
+	migrator.AutoMigrate(&Uploader{}, &Project{}, &Folder{}, &Image{}, &Optimization{})
 }
