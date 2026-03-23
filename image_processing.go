@@ -1,0 +1,35 @@
+package main
+
+import (
+	"fmt"
+	"os/exec"
+	"path"
+	"strconv"
+)
+
+func ResizeImage(inputPath, outputPath string, scale float64) error {
+	scaleString := strconv.FormatFloat(scale, 'E', -1, 64)
+	command := exec.Command("vips", "resize", inputPath, outputPath, scaleString)
+	return command.Run()
+}
+
+func EncodeImageToExtension(inputPath, outputPath string) error {
+	inputExt := path.Ext(inputPath)[1:]
+	outputExt := path.Ext(outputPath)[1:]
+	if inputExt == outputExt {
+		return nil
+	}
+
+	var command *exec.Cmd
+
+	switch outputExt {
+	case "avif":
+		command = exec.Command("avifenc", "-q", "75", "-s", "0", inputPath, outputPath)
+	default:
+		return fmt.Errorf("%v: %w", outputExt, ErrNotSupportedExtension)
+	}
+
+	_, err := command.CombinedOutput()
+
+	return err
+}

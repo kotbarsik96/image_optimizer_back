@@ -75,6 +75,10 @@ func GetOptimizationSizes(sizesRaw string) ([]int, error) {
 		sizes = append(sizes, sizeInt)
 	}
 
+	slices.SortStableFunc(sizes, func(a, b int) int {
+		return a - b
+	})
+
 	return sizes, nil
 }
 

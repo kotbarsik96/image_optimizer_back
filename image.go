@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -132,10 +133,68 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 }
 
 func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string) {
-	filename := fmt.Sprintf("%v.%v", image.Filename, image.Extension)
-	_, err := s3Actions.DownloadFile(ctx, image.Bucket, image.Key, path.Join(outputDir, filename))
+	sizes, _ := GetOptimizationSizes(opt.Sizes)
+	extensions, _ := GetOptimizationExtensions(opt.Extensions)
+
+	// названия форматов без расширений ({"image", "image-2x", "image-3x"})
+	sizesFilenames := []string{}
+	for i := range sizes {
+		n := image.Filename
+		if i > 0 {
+			n = fmt.Sprintf("%v-%vx", image.Filename, i+1)
+		}
+		sizesFilenames = append(sizesFilenames, n)
+	}
+
+	// название оригинального скачанного с s3 изображения (с расширением)
+	originalFileName := fmt.Sprintf("%v.%v", sizesFilenames[len(sizesFilenames)-1], image.Extension)
+	// полный путь к оригинальному изображению
+	originalFilePath := path.Join(outputDir, originalFileName)
+
+	// скачивание изображения в путь originalFilePath
+	_, err := s3Actions.DownloadFile(ctx, image.Bucket, image.Key, originalFilePath)
 	if err != nil {
-		log.Printf("Error while downloading image %v for optimization %v: %v", filename, opt.Title, err)
+		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.Filename, image.Extension, opt.Title, err)
 		return
+	}
+
+	// сначала пройтись по размерам и сделать ресайз на каждый размер
+	for i, sizeFilename := range sizesFilenames {
+		// путь к изображению, от которого будет происходить кодирование в заданные расширения [extensions]
+		baseImgPath := originalFilePath
+
+		// заресайзить изображение, если оно оригинальное
+		if i < len(sizesFilenames)-1 {
+			resizedPath := path.Join(outputDir, fmt.Sprintf("%v.%v", sizeFilename, image.Extension))
+			err := ResizeImage(
+				originalFilePath,
+				resizedPath,
+				float64(sizes[i])/100)
+			if err != nil {
+				log.Printf("Error while resizing %v.%v: %v", image.Filename, image.Extension, err)
+				continue
+			}
+
+			baseImgPath = resizedPath
+		}
+
+		// уже заресайженное изображение кодировать в заданные расширения [extensions]
+		for _, ext := range extensions {
+			filename := fmt.Sprintf("%v.%v", sizeFilename, ext)
+			extPath := path.Join(outputDir, filename)
+			err := EncodeImageToExtension(baseImgPath, extPath)
+			if err != nil {
+				log.Printf("Error while encoding %v to %v: %v", baseImgPath, ext, err)
+			}
+		}
+
+		// удалить текущее изображение, если его формат не указан в [extensions]
+		originalExt := path.Ext(baseImgPath)[1:]
+		if !slices.Contains(extensions, originalExt) {
+			err := os.Remove(baseImgPath)
+			if err != nil {
+				log.Printf("Could not remove file %v: %v", baseImgPath, err)
+			}
+		}
 	}
 }
