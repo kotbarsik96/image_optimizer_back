@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"image_optimizer/imgopt_sse"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -603,4 +605,16 @@ func RouteDownloadOptimization(c *gin.Context) {
 	}
 
 	c.FileAttachment(zipFilepath, optimization.Title+".zip")
+}
+
+// events
+func RouteUploadsEvent(c *gin.Context) {
+	clientChannel := c.MustGet("clientChan").(imgopt_sse.ClientChan)
+	c.Stream(func(w io.Writer) bool {
+		if msg, ok := <-clientChannel; ok {
+			c.SSEvent("message", msg)
+			return true
+		}
+		return false
+	})
 }
