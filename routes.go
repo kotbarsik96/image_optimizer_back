@@ -42,7 +42,7 @@ func RouteNewProject(c *gin.Context) {
 
 	uploader := c.MustGet("uploader").(Uploader)
 
-	title := strings.TrimSpace(c.PostForm("title"))
+	title := ToAcceptablePathName(c.PostForm("title"))
 	if title == "" {
 		title = GetCurrentFormattedTime()
 	}
@@ -592,7 +592,8 @@ func RouteDownloadOptimization(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	optimization := c.MustGet("optimization").(Optimization)
 
-	zipFilepath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, optimization.Title+".zip")
+	title := ToAcceptablePathName(optimization.Title)
+	zipFilepath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, title+".zip")
 	_, err := os.Stat(zipFilepath)
 	if err != nil {
 		RespondError(c, Response{

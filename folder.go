@@ -7,14 +7,11 @@ import (
 	"log"
 	"os"
 	"path"
-	"regexp"
 	"time"
 
 	_ "golang.org/x/image/webp"
 	"gorm.io/gorm"
 )
-
-var foldernameRegExp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
 
 type Folder struct {
 	ID             uint      `gorm:"primarykey" json:"id"`
