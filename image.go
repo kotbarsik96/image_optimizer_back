@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"mime/multipart"
@@ -19,9 +18,9 @@ import (
 type Image struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	FolderID  uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
-	S3Url     string    `json:"s3_url,omitzero"`
-	Bucket    string    `json:"bucket,omitzero"`
-	Key       string    `json:"key,omitzero"`
+	S3Url     *string   `json:"s3_url,omitzero"`
+	Bucket    *string   `json:"bucket,omitzero"`
+	Path      string    `json:"key,omitzero"`
 	Extension string    `json:"extension,omitzero"`
 	Filename  string    `json:"filename,omitzero"`
 	Url       string    `gorm:"-" json:"url"`
@@ -33,93 +32,53 @@ type Image struct {
 }
 
 func (image *Image) GetUrl() string {
-	return (fmt.Sprintf("%v/%v", image.S3Url, url.PathEscape(path.Join(image.Bucket, image.Key))))
+	if image.S3Url == nil {
+		return ""
+	}
+	return (fmt.Sprintf("%v/%v", *image.S3Url, url.PathEscape(path.Join(*image.Bucket, image.Path))))
 }
 
 func (image *Image) Delete(ctx context.Context) error {
-	err := s3Actions.DeleteFiles(ctx, image.Bucket, []string{image.Key})
+	// err := s3Actions.DeleteFiles(ctx, *image.Bucket, []string{image.Path})
+	// if err != nil {
+	// 	log.Printf("Could not delete images from S3: %v", err)
+	// }
+
+	// _, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
+	// return err
+	return nil
+}
+
+func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folder Folder, storage EStorage) (*Image, error) {
+	file, err := fileHeader.Open()
 	if err != nil {
-		log.Printf("Could not delete images from S3: %v", err)
+		return nil, err
+	}
+	defer file.Close()
+
+	extension := strings.ToLower(path.Ext(fileHeader.Filename))[1:]
+	filename := GetFilenameWithoutExtension(fileHeader.Filename)
+	destPath := path.Join(uploader.Uuid, folder.Path, filename+"."+extension)
+
+	img := Image{
+		FolderID:  folder.ID,
+		Path:      destPath,
+		Extension: extension,
+		Filename:  filename,
+		SizeBytes: uint(fileHeader.Size),
 	}
 
-	_, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
-	return err
+	if storage == EStorageLocal {
+		img.S3Url = &Storage.S3.EndpointUrl
+		img.Bucket = &Storage.S3.Bucket
+	}
+
+	return &img, nil
 }
 
 type UploadData struct {
 	Err   string `json:"error"`
 	Image Image  `json:"image"`
-}
-
-func UploadProjectImages(
-	ctx context.Context,
-	uploader Uploader,
-	folder Folder,
-	images []*multipart.FileHeader,
-) []UploadData {
-	responseData := []UploadData{}
-
-	for _, imgFileHeader := range images {
-		data := UploadData{}
-
-		file, err := imgFileHeader.Open()
-		if err != nil {
-			data.Err = ErrorByCurrentEnv("Could not open image file", err).Error()
-			continue
-		}
-
-		extension := strings.ToLower(path.Ext(imgFileHeader.Filename))[1:]
-
-		s3Url := os.Getenv("S3_ENDPOINT_URL")
-		s3Bucket := os.Getenv("S3_BUCKET")
-
-		filename := GetFilenameWithoutExtension(imgFileHeader.Filename)
-
-		hash := Md5(time.Now().String())
-		filenameHashed := fmt.Sprintf(`%v_%v`, filename, hash)
-		key := path.Join(os.Getenv("PROJECT_NAME"), uploader.Uuid, "projects")
-		if folder.Path != "." {
-			key = path.Join(key, folder.Path)
-		}
-		key = path.Join(key, fmt.Sprintf("%v.%v", filenameHashed, extension))
-
-		_, err = s3Actions.UploadFile(ctx, s3Bucket, key, file, "image/"+extension)
-
-		file.Close()
-
-		// если изображение с таким названием уже существует в данной папке - добавить в название хэш
-		_, existsErr := gorm.G[Image](gormDb).
-			Where("folder_id = ? AND filename = ? AND extension = ?", folder.ID, filename, extension).
-			First(ctx)
-		if existsErr == nil || !errors.Is(existsErr, gorm.ErrRecordNotFound) {
-			filename = filenameHashed
-		}
-
-		if err == nil {
-			img := Image{
-				FolderID:  folder.ID,
-				S3Url:     s3Url,
-				Bucket:    s3Bucket,
-				Key:       key,
-				Extension: extension,
-				Filename:  filename,
-				SizeBytes: uint(imgFileHeader.Size),
-			}
-			err := gorm.G[Image](gormDb).Create(ctx, &img)
-
-			if err != nil {
-				data.Err = ErrorByCurrentEnv("Could not save image", err).Error()
-			} else {
-				data.Image = img
-			}
-		} else {
-			data.Err = ErrorByCurrentEnv("Could not upload image", err).Error()
-		}
-
-		responseData = append(responseData, data)
-	}
-
-	return responseData
 }
 
 func (image *Image) AfterFind(tx *gorm.DB) (err error) {
@@ -152,7 +111,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 	originalFilePath := path.Join(outputDir, originalFileName)
 
 	// скачивание изображения в путь originalFilePath
-	_, err := s3Actions.DownloadFile(ctx, image.Bucket, image.Key, originalFilePath)
+	_, err := s3Actions.DownloadFile(ctx, *image.Bucket, image.Path, originalFilePath)
 	if err != nil {
 		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.Filename, image.Extension, opt.Title, err)
 		return

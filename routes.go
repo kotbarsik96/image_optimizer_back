@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image_optimizer/imgopt_sse"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path"
@@ -74,20 +73,20 @@ func RouteNewProject(c *gin.Context) {
 		return
 	}
 
-	responseData := []UploadData{}
-	if c.ContentType() == "multipart/form-data" {
-		form, err := c.MultipartForm()
-		if err != nil {
-			log.Printf("Could not get multipart form: %v\n", err)
-		}
+	// responseData := []UploadData{}
+	// if c.ContentType() == "multipart/form-data" {
+	// 	form, err := c.MultipartForm()
+	// 	if err != nil {
+	// 		log.Printf("Could not get multipart form: %v\n", err)
+	// 	}
 
-		images := form.File["images"]
-		responseData = UploadProjectImages(ctx, uploader, folder, images)
-	}
+	// 	images := form.File["images"]
+	// 	responseData = UploadProjectImages(ctx, uploader, folder, images)
+	// }
 
 	RespondCreated(c, Response{
 		Data: gin.H{
-			"uploads": responseData,
+			// "uploads": responseData,
 			"project": project,
 		},
 		Message: fmt.Sprintf("Project %v created", project.Title),
@@ -301,23 +300,42 @@ func RouteDeleteFolder(c *gin.Context) {
 }
 
 func RouteUploadFiles(c *gin.Context) {
-	ctx := c.Request.Context()
-
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
 
-	responseData := []UploadData{}
-	if c.ContentType() == "multipart/form-data" {
-		form, _ := c.MultipartForm()
-		images := form.File["images"]
-		responseData = UploadProjectImages(ctx, uploader, folder, images)
+	// responseData := []UploadData{}
+	// if c.ContentType() == "multipart/form-data" {
+	// 	form, _ := c.MultipartForm()
+	// 	images := form.File["images"]
+	// 	responseData = UploadProjectImages(ctx, uploader, folder, images)
+	// }
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrInternal("Could not get images from request", err),
+		})
+		return
 	}
+
+	imageFiles := form.File["images"]
+
+	go func() {
+		for _, imgFile := range imageFiles {
+			img, err := NewImageFromFile(imgFile, uploader, folder, EStorageS3)
+			if err != nil {
+				continue
+			}
+
+			Storage.S3.Put(path.Join(uploader.Uuid, "projects", img.Path, img.Filename+img.Extension))
+		}
+	}()
 
 	RespondCreated(c, Response{
 		Data: gin.H{
-			"folder":  folder,
-			"uploads": responseData,
+			"folder": folder,
 		},
+		Message: "Files are uploading",
 	})
 }
 

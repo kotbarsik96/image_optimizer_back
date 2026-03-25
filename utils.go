@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -78,7 +79,8 @@ func ToAcceptablePathName(name string) string {
 }
 
 func GetFilenameWithoutExtension(fname string) string {
-	s := strings.Split(fname, ".")
+	base := path.Base(fname)
+	s := strings.Split(base, ".")
 	return strings.Join(s[0:len(s)-1], ".")
 }
 
