@@ -151,7 +151,7 @@ func RouteRenameProject(c *gin.Context) {
 		First(ctx)
 	if err == nil && existingProject.Title == newTitle {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Project %v already exists", existingProject.Title),
 				nil),
 		})
@@ -227,7 +227,7 @@ func RouteNewFolder(c *gin.Context) {
 	project, err := gorm.G[Project](gormDb).Where("id = ?", parentFolder.ProjectID).First(ctx)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Parent folder is not assigned to any project", err),
+			Error: ErrUnprocessableEntity("Parent folder is not assigned to any project", err),
 		})
 		return
 	}
@@ -246,7 +246,7 @@ func RouteNewFolder(c *gin.Context) {
 		First(ctx)
 	if err == nil && existingFolder.Path == newFolderPath {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Folder %v already exists in project %v", existingFolder.Path, project.Title),
 				err,
 			),
@@ -274,7 +274,7 @@ func RouteDeleteFolder(c *gin.Context) {
 
 	if folder.Path == "." {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Cannot delete root folder", nil),
+			Error: ErrUnprocessableEntity("Cannot delete root folder", nil),
 		})
 		return
 	}
@@ -283,7 +283,7 @@ func RouteDeleteFolder(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrCannotDeleteRootFolder) {
 			RespondError(c, Response{
-				Error: ErrBadRequest(err.Error(), nil),
+				Error: ErrUnprocessableEntity(err.Error(), nil),
 			})
 		} else {
 			RespondError(c, Response{
@@ -326,7 +326,7 @@ func RouteRenameFolder(c *gin.Context) {
 
 	if folder.Path == "." {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				"Invalid request parameters",
 				fmt.Errorf("Cannot rename root folder")),
 		})
@@ -338,7 +338,7 @@ func RouteRenameFolder(c *gin.Context) {
 		First(ctx)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Folder is not associated with any project", err),
+			Error: ErrUnprocessableEntity("Folder is not associated with any project", err),
 		})
 		return
 	}
@@ -346,7 +346,7 @@ func RouteRenameFolder(c *gin.Context) {
 	newName := strings.TrimSpace(c.PostForm("name"))
 	if !IsAcceptablePathName(newName) {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Invalid folder name", nil),
+			Error: ErrUnprocessableEntity("Invalid folder name", nil),
 		})
 		return
 	}
@@ -358,7 +358,7 @@ func RouteRenameFolder(c *gin.Context) {
 		First(ctx)
 	if err == nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Folder %v already exists in project %v", existingFolder.Path, project.Title),
 				nil),
 		})
@@ -412,7 +412,7 @@ func RouteRenameImage(c *gin.Context) {
 	newName := strings.TrimSpace(c.PostForm("name"))
 	if !IsAcceptablePathName(newName) {
 		RespondError(c, Response{
-			Error: ErrBadRequest("Invalid filename", nil),
+			Error: ErrUnprocessableEntity("Invalid filename", nil),
 		})
 		return
 	}
@@ -422,7 +422,7 @@ func RouteRenameImage(c *gin.Context) {
 		First(ctx)
 	if err == nil && existingImage.Filename == newName {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Image %v.%v already exists in folder %v", existingImage.Filename, existingImage.Extension, folder.Path),
 				nil),
 		})
@@ -499,7 +499,7 @@ func RouteStartOptimization(c *gin.Context) {
 	_, err := GetOptimizationExtensions(extensionsString)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest(err.Error(), nil),
+			Error: ErrUnprocessableEntity(err.Error(), nil),
 		})
 		return
 	}
@@ -507,7 +507,7 @@ func RouteStartOptimization(c *gin.Context) {
 	_, err = GetOptimizationSizes(sizesString)
 	if err != nil {
 		RespondError(c, Response{
-			Error: ErrBadRequest(err.Error(), nil),
+			Error: ErrUnprocessableEntity(err.Error(), nil),
 		})
 		return
 	}
@@ -522,7 +522,7 @@ func RouteStartOptimization(c *gin.Context) {
 		First(ctx)
 	if err == nil && existingOpt.Title == title {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Optimization %v already exists", existingOpt.Title),
 				nil),
 		})
@@ -566,7 +566,7 @@ func RouteRenameOptimization(c *gin.Context) {
 		First(ctx)
 	if err == nil && existingOpt.Title == newTitle {
 		RespondError(c, Response{
-			Error: ErrBadRequest(
+			Error: ErrUnprocessableEntity(
 				fmt.Sprintf("Optimization %v already exists", existingOpt.Title),
 				nil),
 		})

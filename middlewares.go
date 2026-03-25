@@ -137,7 +137,7 @@ func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatusJSON(
 				http.StatusBadRequest,
-				ErrBadRequest("Folder is not attached to project", err))
+				ErrUnprocessableEntity("Folder is not attached to project", err))
 			return
 		}
 
@@ -217,7 +217,7 @@ func OptimizationAuthMiddleware() gin.HandlerFunc {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				c.AbortWithStatusJSON(
 					http.StatusBadRequest,
-					ErrBadRequest(
+					ErrUnprocessableEntity(
 						fmt.Sprintf("Optimization %v is not related to any project", opt.Title),
 						err))
 			} else {

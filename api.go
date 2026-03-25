@@ -107,6 +107,13 @@ func ErrNotFound(messageAbstract string, err error) *AppError {
 	return &AppError{http.StatusNotFound, "NOT_FOUND", messageAbstract, err}
 }
 
+func ErrUnprocessableEntity(messageAbstract string, err error) *AppError {
+	if messageAbstract == "" {
+		messageAbstract = "Unprocessable entity"
+	}
+	return &AppError{http.StatusUnprocessableEntity, "UNPROCESSABLE_ENTITY", messageAbstract, err}
+}
+
 func ErrInternal(messageAbstract string, err error) *AppError {
 	if messageAbstract == "" {
 		messageAbstract = "Internal server error"
