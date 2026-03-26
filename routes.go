@@ -57,8 +57,8 @@ func RouteNewProject(c *gin.Context) {
 	}
 
 	title := ToAcceptablePathName(c.PostForm("title"))
-	if title == "" {
-		title = GetCurrentFormattedTime()
+	if title == "_" {
+		title = ToAcceptablePathName(GetCurrentFormattedTime())
 	}
 
 	project := Project{
@@ -316,6 +316,7 @@ func RouteDeleteFolder(c *gin.Context) {
 func RouteUploadFiles(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
+	project := c.MustGet("project").(Project)
 
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -333,13 +334,18 @@ func RouteUploadFiles(c *gin.Context) {
 		ctx := context.Background()
 
 		for _, imgFileHeader := range imageFiles {
-			img, err := NewImageFromFile(imgFileHeader, uploader, folder, storage)
+			// путь к папке изображения
+			dirPath := path.Join(uploader.GetProjectsPath(), project.Title, folder.Path)
+
+			// полный путь к изображению
+			imgPath := path.Join(dirPath, imgFileHeader.Filename)
+
+			img, err := NewImageFromFile(imgFileHeader, folder, imgPath)
 			if err != nil {
 				continue
 			}
 
-			destPath := path.Join(uploader.Uuid, "projects", img.Path, img.Filename+img.Extension)
-			err = storage.PutImage(ctx, destPath, imgFileHeader)
+			err = storage.PutImage(ctx, imgPath, imgFileHeader)
 			if err != nil {
 				continue
 			}
@@ -549,9 +555,9 @@ func RouteStartOptimization(c *gin.Context) {
 		return
 	}
 
-	title := strings.TrimSpace(c.PostForm("title"))
-	if title == "" {
-		title = GetCurrentFormattedTime()
+	title := ToAcceptablePathName(strings.TrimSpace(c.PostForm("title")))
+	if title == "_" {
+		title = ToAcceptablePathName(GetCurrentFormattedTime())
 	}
 
 	existingOpt, err := gorm.G[Optimization](gormDb).
@@ -629,8 +635,8 @@ func RouteDownloadOptimization(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	optimization := c.MustGet("optimization").(Optimization)
 
-	title := ToAcceptablePathName(optimization.Title)
-	zipFilepath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, title+".zip")
+	storageLocal := Storages[EStorageLocal].(StorageLocal)
+	zipFilepath := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), optimization.Title, optimization.Title+".zip")
 	_, err := os.Stat(zipFilepath)
 	if err != nil {
 		RespondError(c, Response{

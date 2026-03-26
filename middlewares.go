@@ -147,6 +147,7 @@ func ProjectFolderAuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set("folder", folder)
+		c.Set("project", project)
 
 		c.Next()
 	}

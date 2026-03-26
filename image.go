@@ -18,9 +18,7 @@ import (
 type Image struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	FolderID  uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
-	S3Url     *string   `json:"s3_url,omitzero"`
-	Bucket    *string   `json:"bucket,omitzero"`
-	Path      string    `json:"key,omitzero"`
+	Path      string    `json:"key,omitzero"` // путь в хранилище (s3, local). Может отличаться от пути папки Folder
 	Extension string    `json:"extension,omitzero"`
 	Filename  string    `json:"filename,omitzero"`
 	Url       string    `gorm:"-" json:"url"`
@@ -33,19 +31,16 @@ type Image struct {
 }
 
 func (image *Image) GetUrl() string {
-	if image.S3Url == nil {
+	if image.Storage == EStorageLocal {
 		return ""
 	}
-	return (fmt.Sprintf("%v/%v", *image.S3Url, url.PathEscape(path.Join(*image.Bucket, image.Path))))
+
+	storage := Storages[EStorageS3].(StorageS3)
+	return storage.EndpointUrl + "/" + path.Join(storage.Bucket, storage.RootPath, url.PathEscape(image.Path))
 }
 
 func (image *Image) Delete(ctx context.Context) error {
-	var storage IStorage
-	if image.S3Url != nil {
-		storage = Storages["s3"]
-	} else {
-		storage = Storages["local"]
-	}
+	storage := Storages[image.Storage]
 
 	err := storage.Remove(ctx, image.Path)
 	if err != nil {
@@ -56,7 +51,10 @@ func (image *Image) Delete(ctx context.Context) error {
 	return err
 }
 
-func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folder Folder, storage IStorage) (*Image, error) {
+// Сформировать Image на основе переданного файла и пути
+//
+// imgPath - путь к изображению с названием файла и расширением (/path/to/img.png)
+func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, imgPath string) (*Image, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, err
@@ -64,22 +62,15 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folde
 	defer file.Close()
 
 	extension := strings.ToLower(path.Ext(fileHeader.Filename))[1:]
-	filename := GetFilenameWithoutExtension(fileHeader.Filename)
-	destPath := path.Join(uploader.Uuid, folder.Path, filename+"."+extension)
+	filename := GetFilenameWithoutExtension(imgPath)
 
 	img := Image{
 		FolderID:  folder.ID,
-		Path:      destPath,
-		Extension: extension,
+		Path:      imgPath,
 		Filename:  filename,
+		Extension: extension,
 		SizeBytes: uint(fileHeader.Size),
 		Storage:   folder.Storage,
-	}
-
-	switch s := storage.(type) {
-	case StorageS3:
-		img.S3Url = &s.EndpointUrl
-		img.Bucket = &s.Bucket
 	}
 
 	return &img, nil
@@ -110,7 +101,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 		sizesFilenames = append(sizesFilenames, n)
 	}
 
-	// название оригинального скачанного с s3 изображения (с расширением)
+	// название оригинального изображения (с расширением)
 	originalFileName := fmt.Sprintf("%v.%v", sizesFilenames[len(sizesFilenames)-1], image.Extension)
 	// полный путь к оригинальному изображению
 	originalFilePath := path.Join(outputDir, originalFileName)

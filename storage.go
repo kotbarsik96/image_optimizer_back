@@ -26,8 +26,11 @@ const (
 
 type IStorage interface {
 	Download(ctx context.Context, sourcePath, outputPath string) (*os.File, error)
+
 	PutImage(ctx context.Context, destPath string, file *multipart.FileHeader) error
+
 	Remove(ctx context.Context, destPath string) error
+
 	RemoveFiles(ctx context.Context, destPaths []string) error
 }
 
@@ -41,16 +44,20 @@ func (sl StoragesList) Cases() []string {
 	return cases
 }
 
-var Storages StoragesList = StoragesList{
-	EStorageLocal: StorageLocal{
-		RootPath: os.Getenv("RESOURCES_PATH"),
-	},
-	EStorageS3: StorageS3{
-		Actions:     imgopt_s3.NewS3Action(),
-		EndpointUrl: os.Getenv("S3_ENDPOINT_URL"),
-		RootPath:    os.Getenv("PROJECT_NAME"),
-		Bucket:      os.Getenv("S3_BUCKET"),
-	},
+var Storages StoragesList
+
+func InitStorages() {
+	Storages = StoragesList{
+		EStorageLocal: StorageLocal{
+			RootPath: os.Getenv("RESOURCES_PATH"),
+		},
+		EStorageS3: StorageS3{
+			Actions:     imgopt_s3.NewS3Action(),
+			EndpointUrl: os.Getenv("S3_ENDPOINT_URL"),
+			RootPath:    os.Getenv("PROJECT_NAME"),
+			Bucket:      os.Getenv("S3_BUCKET"),
+		},
+	}
 }
 
 // локальное хранилище: находится в файловой системе
@@ -59,7 +66,7 @@ type StorageLocal struct {
 }
 
 func (storage StorageLocal) Download(ctx context.Context, sourcePath, outputPath string) (*os.File, error) {
-	sourceFile, err := os.ReadFile(sourcePath)
+	sourceFile, err := os.ReadFile(path.Join(storage.RootPath, sourcePath))
 	if err != nil {
 		return nil, err
 	}

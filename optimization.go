@@ -91,8 +91,10 @@ func (opt *Optimization) Start() {
 
 	log.Printf("Optimization %v started\n", opt.Title)
 
-	dirname := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, opt.Title)
-	err = os.MkdirAll(dirname, 0666)
+	storageLocal := Storages[EStorageLocal].(StorageLocal)
+	dirname := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), opt.Title)
+	tempDirname := path.Join(dirname, "temp")
+	err = os.MkdirAll(tempDirname, 0666)
 	if err != nil {
 		log.Fatalf("Could not create directory %v: %v", dirname, err)
 	}
@@ -102,14 +104,14 @@ func (opt *Optimization) Start() {
 		log.Fatalf("Could not get root folder for optimization %v: %v", opt.Title, err)
 	}
 
-	rootFolder.OptimizeImages(ctx, *opt, dirname)
+	rootFolder.OptimizeImages(ctx, *opt, tempDirname)
 
 	log.Printf("Optimization %v done\n", opt.Title)
 
 	log.Printf("Archiving optimization %v to zip file\n", opt.Title)
 
-	zipPath := path.Join(os.Getenv("OPTIMIZATIONS_PATH"), uploader.Uuid, opt.Title+".zip")
-	err = ZipDir(dirname, zipPath)
+	zipPath := path.Join(dirname, opt.Title+".zip")
+	err = ZipDir(tempDirname, zipPath)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", opt.Title, err)
@@ -117,7 +119,7 @@ func (opt *Optimization) Start() {
 		log.Printf("Zip archive created for optimization %v", zipPath)
 	}
 
-	err = os.RemoveAll(dirname)
+	err = os.RemoveAll(tempDirname)
 	if err != nil {
 		log.Printf("Could not remove temporary dir %v: %v", dirname, err)
 	}

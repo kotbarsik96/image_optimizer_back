@@ -23,12 +23,19 @@ func ZipDir(sourcePath, targetPath string) error {
 			return err
 		}
 
+		if path == "." {
+			return nil
+		}
+
 		relPath, err := filepath.Rel(sourcePath, path)
 		if err != nil {
 			return err
 		}
+		if relPath == "." {
+			return nil
+		}
 
-		if info.IsDir() {
+		if info.IsDir() && relPath != "." {
 			_, err := zipWriter.Create(relPath + "/")
 			return err
 		}
