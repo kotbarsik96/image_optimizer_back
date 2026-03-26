@@ -27,6 +27,7 @@ type Image struct {
 	SizeBytes uint      `json:"size_bytes,omitzero"`
 	Width     uint      `json:"width,omitzero"`
 	Height    uint      `json:"height,omitzero"`
+	Storage   EStorage  `json:"storage"`
 	CreatedAt time.Time `json:"created_at,omitzero"`
 	UpdatedAt time.Time `json:"updated_at,omitzero"`
 }
@@ -39,17 +40,23 @@ func (image *Image) GetUrl() string {
 }
 
 func (image *Image) Delete(ctx context.Context) error {
-	// err := s3Actions.DeleteFiles(ctx, *image.Bucket, []string{image.Path})
-	// if err != nil {
-	// 	log.Printf("Could not delete images from S3: %v", err)
-	// }
+	var storage IStorage
+	if image.S3Url != nil {
+		storage = Storages["s3"]
+	} else {
+		storage = Storages["local"]
+	}
 
-	// _, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
-	// return err
-	return nil
+	err := storage.Remove(ctx, image.Path)
+	if err != nil {
+		return err
+	}
+
+	_, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
+	return err
 }
 
-func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folder Folder, storage EStorage) (*Image, error) {
+func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folder Folder, storage IStorage) (*Image, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, err
@@ -66,19 +73,16 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, uploader Uploader, folde
 		Extension: extension,
 		Filename:  filename,
 		SizeBytes: uint(fileHeader.Size),
+		Storage:   folder.Storage,
 	}
 
-	if storage == EStorageLocal {
-		img.S3Url = &Storage.S3.EndpointUrl
-		img.Bucket = &Storage.S3.Bucket
+	switch s := storage.(type) {
+	case StorageS3:
+		img.S3Url = &s.EndpointUrl
+		img.Bucket = &s.Bucket
 	}
 
 	return &img, nil
-}
-
-type UploadData struct {
-	Err   string `json:"error"`
-	Image Image  `json:"image"`
 }
 
 func (image *Image) AfterFind(tx *gorm.DB) (err error) {
@@ -94,6 +98,7 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string) {
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
 	extensions, _ := GetOptimizationExtensions(opt.Extensions)
+	storage := Storages[image.Storage]
 
 	// названия форматов без расширений ({"image", "image-2x", "image-3x"})
 	sizesFilenames := []string{}
@@ -111,7 +116,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 	originalFilePath := path.Join(outputDir, originalFileName)
 
 	// скачивание изображения в путь originalFilePath
-	_, err := s3Actions.DownloadFile(ctx, *image.Bucket, image.Path, originalFilePath)
+	_, err := storage.Download(ctx, image.Path, originalFilePath)
 	if err != nil {
 		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.Filename, image.Extension, opt.Title, err)
 		return

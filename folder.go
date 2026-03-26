@@ -21,6 +21,7 @@ type Folder struct {
 	ParentID       *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id,omitzero"`
 	Nested         []Folder  `gorm:"foreignKey:ParentID" json:"nested,omitzero"`
 	Images         []Image   `json:"images,omitzero"`
+	Storage        EStorage  `json:"storage"`
 	CreatedAt      time.Time `json:"created_at,omitzero"`
 	UpdatedAt      time.Time `json:"updated_at,omitzero"`
 }
@@ -58,24 +59,18 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	}
 
 	imageIds := []uint{}
+	imagePaths := []string{}
 
-	byBuckets := make(map[string][]string)
 	for _, img := range images {
 		imageIds = append(imageIds, img.ID)
-
-		_, ok := byBuckets[img.Bucket]
-		if !ok {
-			byBuckets[img.Bucket] = []string{}
-		}
-
-		byBuckets[img.Bucket] = append(byBuckets[img.Bucket], img.Key)
+		imagePaths = append(imagePaths, img.Path)
 	}
 
-	for bucket, keys := range byBuckets {
-		err := s3Actions.DeleteFiles(ctx, bucket, keys)
-		if err != nil {
-			log.Printf("Could not delete images from S3: %v", err)
-		}
+	storage := Storages[folder.Storage]
+	err = storage.RemoveFiles(ctx, imagePaths)
+
+	if err != nil {
+		log.Printf("Error deleting folder images from %v storage: %v", folder.Storage, err)
 	}
 
 	_, err = gorm.G[Image](gormDb).
@@ -83,7 +78,7 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 		Delete(ctx)
 
 	if err != nil {
-		log.Printf("Error deleting folder images: %v", err)
+		log.Printf("Error deleting folder images from database: %v", err)
 	}
 
 	_, err = gorm.G[Folder](gormDb).

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image_optimizer/imgopt_sse"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,6 +45,17 @@ func RouteNewProject(c *gin.Context) {
 
 	uploader := c.MustGet("uploader").(Uploader)
 
+	storage := c.PostForm("storage")
+	storages := Storages.Cases()
+	if !slices.Contains(storages, storage) {
+		RespondError(c, Response{
+			Error: ErrUnprocessableEntity(
+				fmt.Sprintf("Invalid storage. Available storages: %v", strings.Join(storages, ", ")),
+				nil),
+		})
+		return
+	}
+
 	title := ToAcceptablePathName(c.PostForm("title"))
 	if title == "" {
 		title = GetCurrentFormattedTime()
@@ -64,6 +77,7 @@ func RouteNewProject(c *gin.Context) {
 	folder := Folder{
 		ProjectID: &project.ID,
 		Path:      ".",
+		Storage:   EStorage(storage),
 	}
 	err = gorm.G[Folder](gormDb).Create(ctx, &folder)
 	if err != nil {
@@ -241,7 +255,6 @@ func RouteNewFolder(c *gin.Context) {
 	}
 
 	newFolderPath := path.Join(parentFolder.Path, c.PostForm("name"))
-	fmt.Println(c.PostForm("name"))
 	existingFolder, err := gorm.G[Folder](gormDb).
 		Where("project_id = ? AND path = ?", project.ID, newFolderPath).
 		First(ctx)
@@ -259,6 +272,7 @@ func RouteNewFolder(c *gin.Context) {
 		Path:      newFolderPath,
 		ProjectID: &project.ID,
 		ParentID:  &parentFolder.ID,
+		Storage:   parentFolder.Storage,
 	}
 	gormDb.Save(&newFolder)
 
@@ -303,13 +317,6 @@ func RouteUploadFiles(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
 
-	// responseData := []UploadData{}
-	// if c.ContentType() == "multipart/form-data" {
-	// 	form, _ := c.MultipartForm()
-	// 	images := form.File["images"]
-	// 	responseData = UploadProjectImages(ctx, uploader, folder, images)
-	// }
-
 	form, err := c.MultipartForm()
 	if err != nil {
 		RespondError(c, Response{
@@ -320,14 +327,24 @@ func RouteUploadFiles(c *gin.Context) {
 
 	imageFiles := form.File["images"]
 
+	storage := Storages[folder.Storage]
+
 	go func() {
-		for _, imgFile := range imageFiles {
-			img, err := NewImageFromFile(imgFile, uploader, folder, EStorageS3)
+		ctx := context.Background()
+
+		for _, imgFileHeader := range imageFiles {
+			img, err := NewImageFromFile(imgFileHeader, uploader, folder, storage)
 			if err != nil {
 				continue
 			}
 
-			Storage.S3.Put(path.Join(uploader.Uuid, "projects", img.Path, img.Filename+img.Extension))
+			destPath := path.Join(uploader.Uuid, "projects", img.Path, img.Filename+img.Extension)
+			err = storage.PutImage(ctx, destPath, imgFileHeader)
+			if err != nil {
+				continue
+			}
+
+			err = gorm.G[Image](gormDb).Create(ctx, img)
 		}
 	}()
 

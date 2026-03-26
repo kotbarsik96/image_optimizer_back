@@ -2,25 +2,29 @@ package imgopt_s3
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"os"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type S3Actions struct {
 	Config  *aws.Config
 	Client  *s3.Client
 	Manager *transfermanager.Client
+}
+
+func NewS3Action() *S3Actions {
+	s3Actions := &S3Actions{}
+	err := s3Actions.Init()
+	if err != nil {
+		log.Printf("WARNING: Could not initialize S3: %v", err)
+	}
+	return s3Actions
 }
 
 func (s *S3Actions) Init() error {
@@ -63,74 +67,6 @@ func (s *S3Actions) InitClient() {
 	cfg := s.Config
 	client := s3.NewFromConfig(*cfg)
 	s.Client = client
-}
-
-func (s *S3Actions) UploadFile(ctx context.Context, bucket, key string, file multipart.File, contentType string) (
-	*s3.PutObjectOutput, error) {
-	client := s.Client
-
-	output, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        file,
-		ContentType: aws.String(contentType),
-	})
-
-	return output, err
-}
-
-func (s *S3Actions) DeleteFiles(ctx context.Context, bucket string, keys []string) error {
-	if len(keys) == 0 {
-		return nil
-	}
-
-	client := s.Client
-
-	objects := []types.ObjectIdentifier{}
-	for _, key := range keys {
-		objects = append(objects, types.ObjectIdentifier{
-			Key: &key,
-		})
-	}
-
-	input := s3.DeleteObjectsInput{
-		Bucket: aws.String(bucket),
-		Delete: &types.Delete{
-			Objects: objects,
-		},
-	}
-
-	delOut, err := client.DeleteObjects(ctx, &input)
-	if err != nil || len(delOut.Errors) > 0 {
-		// удалить объекты не удалось - получить ошибку
-		log.Printf("Error deleting objects from bucket %s\n", bucket)
-		if err != nil {
-			var noBucket *types.NoSuchBucket
-			if errors.As(err, &noBucket) {
-				err = noBucket
-			}
-		} else if len(delOut.Errors) > 0 {
-			for _, outErr := range delOut.Errors {
-				log.Printf("%s: %s\n", *outErr.Key, *outErr.Message)
-			}
-			err = fmt.Errorf("%s", *delOut.Errors[0].Message)
-		} else {
-			// убедиться в успешном удалении объектов или получить ошибку
-			for _, delObjs := range delOut.Deleted {
-				err = s3.NewObjectNotExistsWaiter(s.Client).Wait(
-					ctx,
-					&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: delObjs.Key},
-					time.Minute)
-				if err != nil {
-					log.Printf("Failed attempt to wait for object %s to be deleted.\n", *delObjs.Key)
-				} else {
-					log.Printf("Deleted %s.\n", *delObjs.Key)
-				}
-			}
-		}
-	}
-
-	return err
 }
 
 func (s *S3Actions) DownloadFile(ctx context.Context, bucket, key, destFilepath string) (*os.File, error) {
