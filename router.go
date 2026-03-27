@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image_optimizer/imgopt_sse"
 	"os"
 	"strings"
@@ -47,6 +48,16 @@ func RegisterMiddlewares() {
 func ListRoutes() {
 	eventStream := imgopt_sse.NewServer()
 
+	go func() {
+		for {
+			time.Sleep(time.Second * 5)
+			now := time.Now().Format(time.DateTime)
+			currentTime := fmt.Sprintf("The current time is: %v", now)
+
+			eventStream.Message <- currentTime
+		}
+	}()
+
 	projects := router.Group("/projects", AuthMiddleware())
 	{
 		projects.GET("/", RouteGetProjectsList)
@@ -81,8 +92,9 @@ func ListRoutes() {
 		optimizations.GET("/archive/:optimization_id", OptimizationAuthMiddleware(), RouteDownloadOptimization)
 	}
 
-	events := router.Group("/events", imgopt_sse.HeadersMiddleware(), eventStream.ServeHTTP())
+	events := router.Group("/events", AuthMiddleware(), imgopt_sse.HeadersMiddleware())
 	{
-		events.GET("/uploads", RouteUploadsEvent)
+		events.GET("/uploads", eventStream.ServeHTTP(), RouteUploadsEvent)
+		events.GET("/optimizations", RouteOptimizationEvent)
 	}
 }

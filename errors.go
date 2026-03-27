@@ -12,3 +12,5 @@ var ErrLessThanMin = errors.New("Value is less than required")
 var ErrMoreThanMax = errors.New("Value is more than required")
 
 var ErrS3IsNotAvailable = errors.New("S3 is not available")
+
+var ErrActionProgressAlreadyExists = errors.New("Action progress already exists")

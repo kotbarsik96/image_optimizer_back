@@ -92,7 +92,7 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	return err
 }
 
-func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirname string) {
+func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirname string, progress *Progress) {
 	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
 	if err != nil {
 		log.Printf("Could not get images of %v: %v", folder.Path, err)
@@ -104,7 +104,7 @@ func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirn
 		if err != nil {
 			log.Printf("Could not make folder for %v for image %v.%v: %v", imgDirname, img.Filename, img.Extension, err)
 		}
-		img.Optimize(ctx, opt, imgDirname)
+		img.Optimize(ctx, opt, imgDirname, progress)
 	}
 
 	nested, err := folder.GetNested(ctx)
@@ -112,6 +112,6 @@ func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, dirn
 		log.Printf("Could not get nested folders of %v: %v", folder.Path, err)
 	}
 	for _, nestedFolder := range nested {
-		nestedFolder.OptimizeImages(ctx, opt, dirname)
+		nestedFolder.OptimizeImages(ctx, opt, dirname, progress)
 	}
 }

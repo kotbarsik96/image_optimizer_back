@@ -18,7 +18,6 @@ import (
 )
 
 // projects
-
 func RouteGetProjectsList(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -189,7 +188,6 @@ func RouteRenameProject(c *gin.Context) {
 }
 
 // folders
-
 func RouteGetFolder(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -420,7 +418,6 @@ func RouteRenameFolder(c *gin.Context) {
 }
 
 // images
-
 func RouteDeleteImage(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -484,7 +481,6 @@ func RouteRenameImage(c *gin.Context) {
 }
 
 // optimizations
-
 func RouteGetOptimization(c *gin.Context) {
 	optimization := c.MustGet("optimization").(Optimization)
 
@@ -658,4 +654,45 @@ func RouteUploadsEvent(c *gin.Context) {
 		}
 		return false
 	})
+}
+
+func RouteOptimizationEvent(c *gin.Context) {
+	// uploader := c.MustGet("uploader").(Uploader)
+
+	// actions := UploadersProgresses.Actions(uploader, EPrActOptimizations)
+
+	// if len(actions) < 1 {
+	// 	RespondError(c, Response{
+	// 		Error: ErrNotFound("Not found optimizations in progress", nil),
+	// 	})
+	// 	return
+	// }
+
+	// var mu sync.Mutex
+	// var wg sync.WaitGroup
+
+	// for _, action := range actions {
+	// 	wg.Add(1)
+	// 	go func(action ActionProgress, c *gin.Context) {
+	// 		for {
+	// 			_, ok := <-action.Progress.GetUpdates()
+	// 			if !ok {
+	// 				wg.Done()
+	// 				break
+	// 			}
+
+	// 			mu.Lock()
+	// 			list := make(map[int]float64)
+	// 			for id, ap := range actions {
+	// 				list[id] = ap.Progress.GetPercent()
+	// 			}
+	// 			c.SSEvent("progress_update", list)
+	// 			c.Writer.Flush()
+	// 			mu.Unlock()
+	// 			continue
+	// 		}
+	// 	}(action, c.Copy())
+	// }
+
+	// wg.Wait()
 }

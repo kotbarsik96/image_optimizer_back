@@ -86,10 +86,11 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string) {
+func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string, progress *Progress) {
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
 	extensions, _ := GetOptimizationExtensions(opt.Extensions)
 	storage := Storages[image.Storage]
+	defer progress.Increment()
 
 	// названия форматов без расширений ({"image", "image-2x", "image-3x"})
 	sizesFilenames := []string{}
