@@ -104,7 +104,14 @@ func (opt *Optimization) Start() {
 		log.Fatalf("Could not get root folder for optimization %v: %v", opt.Title, err)
 	}
 
-	rootFolder.OptimizeImages(ctx, *opt, tempDirname)
+	imagesCount, err := gorm.G[Image](gormDb).Where(`folder_id IN (
+		SELECT id FROM folders WHERE project_id = ?
+	)`, project.ID).Count(ctx, "id")
+	if err != nil {
+		log.Printf("Progress watching for optimization %v started incorrectly: could not get images count: %v", opt.Title, err)
+	}
+	progress := ProgressesStorage.NewProgress(EProgressStorageOptimizations, opt.ID, uint(imagesCount+1))
+	rootFolder.OptimizeImages(ctx, *opt, tempDirname, progress)
 
 	log.Printf("Optimization %v done\n", opt.Title)
 
@@ -112,6 +119,7 @@ func (opt *Optimization) Start() {
 
 	zipPath := path.Join(dirname, opt.Title+".zip")
 	err = ZipDir(tempDirname, zipPath)
+	ProgressesStorage.FinishProgress(progress)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", opt.Title, err)

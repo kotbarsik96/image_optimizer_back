@@ -86,7 +86,8 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string) {
+func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string, progress *Progress) {
+	defer progress.Increment()
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
 	extensions, _ := GetOptimizationExtensions(opt.Extensions)
 	storage := Storages[image.Storage]
