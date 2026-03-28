@@ -45,8 +45,6 @@ func RegisterMiddlewares() {
 }
 
 func ListRoutes() {
-	eventStream := imgopt_sse.NewServer()
-
 	projects := router.Group("/projects", AuthMiddleware())
 	{
 		projects.GET("/", RouteGetProjectsList)
@@ -81,8 +79,8 @@ func ListRoutes() {
 		optimizations.GET("/archive/:optimization_id", OptimizationAuthMiddleware(), RouteDownloadOptimization)
 	}
 
-	events := router.Group("/events", imgopt_sse.HeadersMiddleware(), eventStream.ServeHTTP())
+	events := router.Group("/events", AuthMiddleware(), imgopt_sse.HeadersMiddleware())
 	{
-		events.GET("/uploads", RouteUploadsEvent)
+		events.GET("/optimizations/:optimization_id", OptimizationAuthMiddleware(), RouteOptimizationProgress)
 	}
 }

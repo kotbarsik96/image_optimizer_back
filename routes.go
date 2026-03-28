@@ -593,6 +593,7 @@ func RouteStartOptimization(c *gin.Context) {
 		c,
 		Response{
 			Message: "Optimization started",
+			Data:    opt,
 		},
 		http.StatusAccepted)
 }
@@ -654,6 +655,38 @@ func RouteUploadsEvent(c *gin.Context) {
 	c.Stream(func(w io.Writer) bool {
 		if msg, ok := <-clientChannel; ok {
 			c.SSEvent("message", msg)
+			return true
+		}
+		return false
+	})
+}
+
+func RouteOptimizationProgress(c *gin.Context) {
+	optimization := c.MustGet("optimization").(Optimization)
+	progress, err := ProgressesStorage.GetProgress(EProgressStorageOptimizations, optimization.ID)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrUnprocessableEntity("Optimization is not in progress", err),
+		})
+		return
+	}
+
+	clientChannel := make(ProgressClientChan)
+	progress.Stream.NewClients <- clientChannel
+
+	go func() {
+		<-c.Writer.CloseNotify()
+
+		for range clientChannel {
+		}
+
+		progress.Stream.ClosedClients <- clientChannel
+	}()
+
+	c.Stream(func(w io.Writer) bool {
+		if value, ok := <-clientChannel; ok {
+			c.SSEvent("update", value)
+			fmt.Println(value)
 			return true
 		}
 		return false

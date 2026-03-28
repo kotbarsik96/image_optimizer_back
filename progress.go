@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 type EProgressActionName string
 
@@ -11,10 +14,10 @@ const (
 type Progress struct {
 	ActionName EProgressActionName
 	ActionID   uint
+	Stream     *ProgressStream
 	mu         sync.Mutex
 	completed  uint
 	total      uint
-	stream     *ProgressStream
 }
 
 func (p *Progress) Increment() {
@@ -24,7 +27,7 @@ func (p *Progress) Increment() {
 	p.mu.Unlock()
 
 	select {
-	case p.stream.Value <- percent:
+	case p.Stream.Value <- percent:
 	default:
 	}
 }
@@ -35,7 +38,7 @@ func (p *Progress) Finish() {
 	p.mu.Unlock()
 
 	select {
-	case p.stream.Value <- 100:
+	case p.Stream.Value <- 100:
 	default:
 	}
 }
@@ -60,22 +63,22 @@ func (ps *TProgressesStorage) NewProgress(actionName EProgressActionName, action
 		ActionName: actionName,
 		ActionID:   actionID,
 		total:      total,
-		stream:     NewProgressStream(),
+		Stream:     NewProgressStream(),
 	}
-	go p.stream.listen()
+	go p.Stream.listen()
 	ps.progresses = append(ps.progresses, p)
 	return p
 }
 
-func (ps *TProgressesStorage) GetProgress(actionName EProgressActionName, actionID uint) *Progress {
+func (ps *TProgressesStorage) GetProgress(actionName EProgressActionName, actionID uint) (*Progress, error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	for _, p := range ps.progresses {
 		if p.ActionName == actionName && p.ActionID == actionID {
-			return p
+			return p, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("Progress %v.%v not found", actionName, actionID)
 }
 
 func (ps *TProgressesStorage) FinishProgress(p *Progress) {
