@@ -10,14 +10,15 @@ import (
 func ResizeImage(inputPath, outputPath string, scale float64) error {
 	scaleString := strconv.FormatFloat(scale, 'E', -1, 64)
 	command := exec.Command("vips", "resize", inputPath, outputPath, scaleString)
-	return command.Run()
+	_, err := command.CombinedOutput()
+	return err
 }
 
 func EncodeImageToExtension(inputPath, outputPath string) error {
 	inputExt := path.Ext(inputPath)[1:]
 	outputExt := path.Ext(outputPath)[1:]
 	if inputExt == outputExt {
-		return nil
+		return CopyFile(outputPath, inputPath)
 	}
 
 	var command *exec.Cmd

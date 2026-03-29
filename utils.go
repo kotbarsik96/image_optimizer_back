@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -96,4 +97,25 @@ func FilterSlice[V any](slice []V, filterFunc func(index int, item V, slice []V)
 
 func GetCurrentFormattedTime() string {
 	return time.Now().Format(time.DateTime)
+}
+
+func CopyFile(destPath, srcPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, srcFile)
+	if err != nil {
+		return err
+	}
+
+	return destFile.Sync()
 }

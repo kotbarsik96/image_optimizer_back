@@ -6,7 +6,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/url"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -86,11 +85,16 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir string, progress *Progress) {
+func (image *Image) Optimize(ctx context.Context, opt Optimization, imgDir, downloadsDir string, progress *Progress) {
 	defer progress.Increment()
+
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
 	extensions, _ := GetOptimizationExtensions(opt.Extensions)
 	storage := Storages[image.Storage]
+
+	if len(sizes) == 0 || len(extensions) == 0 {
+		return
+	}
 
 	// названия форматов без расширений ({"image", "image-2x", "image-3x"})
 	sizesFilenames := []string{}
@@ -103,9 +107,9 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 	}
 
 	// название оригинального изображения (с расширением)
-	originalFileName := fmt.Sprintf("%v.%v", sizesFilenames[len(sizesFilenames)-1], image.Extension)
+	originalFileName := sizesFilenames[0] + "_original" + "." + image.Extension
 	// полный путь к оригинальному изображению
-	originalFilePath := path.Join(outputDir, originalFileName)
+	originalFilePath := path.Join(downloadsDir, originalFileName)
 
 	// скачивание изображения в путь originalFilePath
 	_, err := storage.Download(ctx, image.Path, originalFilePath)
@@ -119,15 +123,24 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 		// путь к изображению, от которого будет происходить кодирование в заданные расширения [extensions]
 		baseImgPath := originalFilePath
 
-		// заресайзить изображение, если оно оригинальное
-		if i < len(sizesFilenames)-1 {
-			resizedPath := path.Join(outputDir, fmt.Sprintf("%v.%v", sizeFilename, image.Extension))
+		// заресайзить изображение, если оно не оригинальное
+		if sizes[i] != 100 {
+			resizedFilename := sizeFilename + "." + image.Extension
+			var resizedPath string
+			if slices.Contains(extensions, image.Extension) {
+				// если расширение оригинала есть в списке [extensions] - итоговое изображение поместить сразу в imageDir (archive)
+				resizedPath = path.Join(imgDir, resizedFilename)
+			} else {
+				// если расширение оригинала отсутствует в списке [extensions] - итоговое изображение поместить в [downloadsPath]
+				resizedPath = path.Join(downloadsDir, resizedFilename)
+			}
+
 			err := ResizeImage(
 				originalFilePath,
 				resizedPath,
 				float64(sizes[i])/100)
 			if err != nil {
-				log.Printf("Error while resizing %v.%v: %v", image.Filename, image.Extension, err)
+				log.Printf("Error while resizing %v: %v", originalFilePath, err)
 				continue
 			}
 
@@ -136,20 +149,18 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, outputDir st
 
 		// уже заресайженное изображение кодировать в заданные расширения [extensions]
 		for _, ext := range extensions {
-			filename := fmt.Sprintf("%v.%v", sizeFilename, ext)
-			extPath := path.Join(outputDir, filename)
+			filename := sizeFilename + "." + ext
+			extPath := path.Join(imgDir, filename)
+
+			// изображение оригинального формата уже обработано, если оно не является оригиналом
+			// оригинал же находится в папке downloads, поэтому его необходимо будет скопировать
+			if ext == image.Extension && sizes[i] != 100 {
+				continue
+			}
+
 			err := EncodeImageToExtension(baseImgPath, extPath)
 			if err != nil {
 				log.Printf("Error while encoding %v to %v: %v", baseImgPath, ext, err)
-			}
-		}
-
-		// удалить текущее изображение, если его формат не указан в [extensions]
-		originalExt := path.Ext(baseImgPath)[1:]
-		if !slices.Contains(extensions, originalExt) {
-			err := os.Remove(baseImgPath)
-			if err != nil {
-				log.Printf("Could not remove file %v: %v", baseImgPath, err)
 			}
 		}
 	}

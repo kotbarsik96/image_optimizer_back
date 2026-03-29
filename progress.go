@@ -114,7 +114,6 @@ func (ps *ProgressStream) listen() {
 		for clientChan := range ps.TotalClients {
 			close(clientChan)
 			delete(ps.TotalClients, clientChan)
-			fmt.Println("closing client chan")
 		}
 	}()
 

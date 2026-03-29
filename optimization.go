@@ -79,11 +79,25 @@ func (optimization *Optimization) Delete(ctx context.Context) error {
 	return err
 }
 
-func (opt *Optimization) Start() {
+/*
+Запуск оптимизации
+
+Формируется путь OPT_PATH: /[RESOURCES_PATH]/uploaders/[UPLOADER_UUID]/optimizations/[OPTIMIZATION_NAME]
+
+Внутри OPT_PATH формируются:
+
+1. OPT_PATH/temp/archive - папка для создания архива
+
+2. OPT_PATH/temp/downloads - папка, в которую будут скачаны оригиналы изображений, подлежащие оптимизации
+
+Когда процесс оптимизации завершится, всё содержимое OPT_PATH/temp/archive будет архивировано в OPT_PATH/[OPTIMIZATION_NAME].zip. Вся папка temp будет удалена
+*/
+func (o *Optimization) Start() {
+	// подготовка: создание необходимых папок
 	ctx := context.Background()
-	project, err := gorm.G[Project](gormDb).Where("id = ?", opt.ProjectID).First(ctx)
+	project, err := gorm.G[Project](gormDb).Where("id = ?", o.ProjectID).First(ctx)
 	if err != nil {
-		log.Fatalf("project not found for opt %v: %v\n", opt.ID, err)
+		log.Fatalf("project not found for opt %v: %v\n", o.ID, err)
 	}
 
 	uploader, err := gorm.G[Uploader](gormDb).Where("id = ?", project.UploaderID).First(ctx)
@@ -91,46 +105,69 @@ func (opt *Optimization) Start() {
 		log.Fatalf("uploader not found for project %v: %v\n", project.ID, err)
 	}
 
-	log.Printf("Optimization %v started\n", opt.Title)
+	log.Printf("Optimization %v started\n", o.Title)
 
 	storageLocal := Storages[EStorageLocal].(StorageLocal)
-	dirname := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), opt.Title)
-	tempDirname := path.Join(dirname, "temp")
-	err = os.MkdirAll(tempDirname, 0666)
-	if err != nil {
-		log.Fatalf("Could not create directory %v: %v", dirname, err)
-	}
+	// [OPT_PATH]
+	optPath := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), o.Title)
+
+	tempDir := o.CreateDirFatal(optPath, "temp")
+	archiveDir := o.CreateDirFatal(tempDir, "archive")
+	downloadsDir := o.CreateDirFatal(tempDir, "downloads")
 
 	rootFolder, err := project.GetRootFolder(ctx)
 	if err != nil {
-		log.Fatalf("Could not get root folder for optimization %v: %v", opt.Title, err)
+		log.Fatalf("Could not get root folder for optimization %v: %v", o.Title, err)
 	}
 
-	imagesCount, err := gorm.G[Image](gormDb).Where(`folder_id IN (
-		SELECT id FROM folders WHERE project_id = ?
-	)`, project.ID).Count(ctx, "id")
-	if err != nil {
-		log.Printf("Progress watching for optimization %v started incorrectly: could not get images count: %v", opt.Title, err)
-	}
-	progress := ProgressesStorage.NewProgress(EProgressStorageOptimizations, opt.ID, uint(imagesCount+1))
-	rootFolder.OptimizeImages(ctx, *opt, tempDirname, progress)
+	// подготовка: инициализация прогресса
+	progress := o.NewOptimizationProgress(ctx, project)
 
-	log.Printf("Optimization %v done\n", opt.Title)
+	// подготовка завершена: запуск оптимизации с корневой папки
+	rootFolder.OptimizeImages(ctx, *o, archiveDir, downloadsDir, progress)
 
-	log.Printf("Archiving optimization %v to zip file\n", opt.Title)
+	log.Printf("Optimization %v done\n", o.Title)
 
-	zipPath := path.Join(dirname, opt.Title+".zip")
-	err = ZipDir(tempDirname, zipPath)
+	log.Printf("Archiving optimization %v to zip file\n", o.Title)
+
+	// файлы оптмизированы: сформировать архив
+	zipPath := path.Join(optPath, o.Title+".zip")
+	err = ZipDir(archiveDir, zipPath)
 	ProgressesStorage.FinishProgress(progress)
 
 	if err != nil {
-		log.Printf("Could not create zip archive for optimization %v: %v", opt.Title, err)
+		log.Printf("Could not create zip archive for optimization %v: %v", o.Title, err)
 	} else {
 		log.Printf("Zip archive created for optimization %v", zipPath)
 	}
 
-	err = os.RemoveAll(tempDirname)
+	// удаление /temp
+	// time.Sleep нужен для снижения рисков ошибки "The file is being used by another process"
+	time.Sleep(time.Millisecond * 1500)
+	err = os.RemoveAll(tempDir)
 	if err != nil {
-		log.Printf("Could not remove temporary dir %v: %v", dirname, err)
+		log.Printf("Could not remove temporary dir %v: %v", optPath, err)
 	}
+}
+
+func (o *Optimization) CreateDirFatal(rootPath, dirName string) string {
+	outputDir := path.Join(rootPath, dirName)
+	err := os.MkdirAll(outputDir, 0666)
+	if err != nil {
+		log.Fatalf("Could not create %v directory %v: %v", dirName, outputDir, err)
+	}
+	return outputDir
+}
+
+func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Project) *Progress {
+	imagesCount, err := gorm.G[Image](gormDb).Where(`folder_id IN (
+		SELECT id FROM folders WHERE project_id = ?
+	)`, project.ID).Count(ctx, "id")
+	if err != nil {
+		log.Printf("Progress watching for optimization %v started incorrectly: could not get images count: %v", o.Title, err)
+	}
+
+	// imagesCount + операция по созданию архива
+	total := uint(imagesCount + 1)
+	return ProgressesStorage.NewProgress(EProgressStorageOptimizations, o.ID, total)
 }
