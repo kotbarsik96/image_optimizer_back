@@ -120,3 +120,10 @@ func ErrInternal(messageAbstract string, err error) *AppError {
 	}
 	return &AppError{http.StatusInternalServerError, "SERVER_ERROR", messageAbstract, err}
 }
+
+func ErrGatewayTimeout(messageAbstract string, err error) *AppError {
+	if messageAbstract == "" {
+		messageAbstract = "Gateway timeout"
+	}
+	return &AppError{http.StatusInternalServerError, "GATEWAY_TIMEOUT", messageAbstract, err}
+}

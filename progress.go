@@ -110,7 +110,14 @@ type ProgressStream struct {
 }
 
 func (ps *ProgressStream) listen() {
-loop:
+	defer func() {
+		for clientChan := range ps.TotalClients {
+			close(clientChan)
+			delete(ps.TotalClients, clientChan)
+			fmt.Println("closing client chan")
+		}
+	}()
+
 	for {
 		select {
 		case client := <-ps.NewClients:
@@ -119,7 +126,11 @@ loop:
 		case client := <-ps.ClosedClients:
 			delete(ps.TotalClients, client)
 
-		case value := <-ps.Value:
+		case value, ok := <-ps.Value:
+			if !ok {
+				return
+			}
+
 			for clientChan := range ps.TotalClients {
 				select {
 				case clientChan <- value:
@@ -130,7 +141,7 @@ loop:
 			}
 
 			if value >= 100 {
-				break loop
+				return
 			}
 		}
 	}

@@ -34,6 +34,7 @@ type Optimization struct {
 	UpdatedAt  time.Time `json:"updated_at,omitzero"`
 }
 
+// получить []string из строки вида "avif|jpeg|png": []string{"avif", "jpeg", "png"}
 func GetOptimizationExtensions(extensionsRaw string) ([]string, error) {
 	extensions := []string{}
 	for ext := range strings.SplitSeq(extensionsRaw, "|") {
@@ -46,6 +47,7 @@ func GetOptimizationExtensions(extensionsRaw string) ([]string, error) {
 	return extensions, nil
 }
 
+// получить []int из строки вида "75|50|100". Слайс будет отсортирован по возрастанию: []int{50, 75, 100}
 func GetOptimizationSizes(sizesRaw string) ([]int, error) {
 	sizes := []int{}
 

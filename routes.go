@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image_optimizer/imgopt_sse"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -650,16 +650,6 @@ func RouteDownloadOptimization(c *gin.Context) {
 }
 
 // events
-func RouteUploadsEvent(c *gin.Context) {
-	clientChannel := c.MustGet("clientChan").(imgopt_sse.ClientChan)
-	c.Stream(func(w io.Writer) bool {
-		if msg, ok := <-clientChannel; ok {
-			c.SSEvent("message", msg)
-			return true
-		}
-		return false
-	})
-}
 
 func RouteOptimizationProgress(c *gin.Context) {
 	optimization := c.MustGet("optimization").(Optimization)
@@ -672,22 +662,33 @@ func RouteOptimizationProgress(c *gin.Context) {
 	}
 
 	clientChannel := make(ProgressClientChan)
-	progress.Stream.NewClients <- clientChannel
+
+	select {
+	case progress.Stream.NewClients <- clientChannel:
+	case <-c.Request.Context().Done():
+	case <-time.After(2 * time.Second):
+		RespondError(c, Response{
+			Error: ErrGatewayTimeout("", nil),
+		})
+		return
+	}
 
 	go func() {
-		<-c.Writer.CloseNotify()
+		<-c.Request.Context().Done()
 
 		for range clientChannel {
 		}
 
-		progress.Stream.ClosedClients <- clientChannel
+		select {
+		case progress.Stream.ClosedClients <- clientChannel:
+		default:
+		}
 	}()
 
 	c.Stream(func(w io.Writer) bool {
 		if value, ok := <-clientChannel; ok {
-			c.SSEvent("update", value)
-			fmt.Println(value)
-			return true
+			c.SSEvent("message", value)
+			return value < 100
 		}
 		return false
 	})
