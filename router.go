@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image_optimizer/imgopt_sse"
 	"os"
 	"strings"
 	"time"
@@ -79,7 +78,7 @@ func ListRoutes() {
 		optimizations.GET("/archive/:optimization_id", OptimizationAuthMiddleware(), RouteDownloadOptimization)
 	}
 
-	events := router.Group("/events", AuthMiddleware(), imgopt_sse.HeadersMiddleware())
+	events := router.Group("/events", AuthMiddleware(), SSEHeadersMiddleware())
 	{
 		events.GET("/optimizations/:optimization_id", OptimizationAuthMiddleware(), RouteOptimizationProgress)
 	}
