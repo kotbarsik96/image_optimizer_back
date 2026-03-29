@@ -85,7 +85,7 @@ func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (image *Image) Optimize(ctx context.Context, opt Optimization, imgDir, downloadsDir string, progress *Progress) {
+func (image *Image) Optimize(ctx context.Context, opt Optimization, archiveImgDir, downloadImgDir string, progress *Progress) {
 	defer progress.Increment()
 
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
@@ -109,7 +109,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, imgDir, down
 	// название оригинального изображения (с расширением)
 	originalFileName := sizesFilenames[0] + "_original" + "." + image.Extension
 	// полный путь к оригинальному изображению
-	originalFilePath := path.Join(downloadsDir, originalFileName)
+	originalFilePath := path.Join(downloadImgDir, originalFileName)
 
 	// скачивание изображения в путь originalFilePath
 	_, err := storage.Download(ctx, image.Path, originalFilePath)
@@ -129,10 +129,10 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, imgDir, down
 			var resizedPath string
 			if slices.Contains(extensions, image.Extension) {
 				// если расширение оригинала есть в списке [extensions] - итоговое изображение поместить сразу в imageDir (archive)
-				resizedPath = path.Join(imgDir, resizedFilename)
+				resizedPath = path.Join(archiveImgDir, resizedFilename)
 			} else {
 				// если расширение оригинала отсутствует в списке [extensions] - итоговое изображение поместить в [downloadsPath]
-				resizedPath = path.Join(downloadsDir, resizedFilename)
+				resizedPath = path.Join(downloadImgDir, resizedFilename)
 			}
 
 			err := ResizeImage(
@@ -150,7 +150,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, imgDir, down
 		// уже заресайженное изображение кодировать в заданные расширения [extensions]
 		for _, ext := range extensions {
 			filename := sizeFilename + "." + ext
-			extPath := path.Join(imgDir, filename)
+			extPath := path.Join(archiveImgDir, filename)
 
 			// изображение оригинального формата уже обработано, если оно не является оригиналом
 			// оригинал же находится в папке downloads, поэтому его необходимо будет скопировать

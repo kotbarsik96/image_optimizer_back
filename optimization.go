@@ -142,8 +142,6 @@ func (o *Optimization) Start() {
 	}
 
 	// удаление /temp
-	// time.Sleep нужен для снижения рисков ошибки "The file is being used by another process"
-	time.Sleep(time.Millisecond * 1500)
 	err = os.RemoveAll(tempDir)
 	if err != nil {
 		log.Printf("Could not remove temporary dir %v: %v", optPath, err)

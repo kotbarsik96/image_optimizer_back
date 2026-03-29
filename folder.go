@@ -99,12 +99,21 @@ func (folder *Folder) OptimizeImages(ctx context.Context, opt Optimization, arch
 	}
 
 	for _, img := range images {
-		imgDir := path.Join(archiveDir, folder.Path)
-		err := os.MkdirAll(imgDir, 0666)
+		archiveImgDir := path.Join(archiveDir, folder.Path)
+		err := os.MkdirAll(archiveImgDir, 0666)
 		if err != nil {
-			log.Printf("Could not make folder for %v for image %v.%v: %v", imgDir, img.Filename, img.Extension, err)
+			log.Printf("Could not make archive folder %v: %v", archiveImgDir, err)
+			continue
 		}
-		img.Optimize(ctx, opt, imgDir, downloadsDir, progress)
+
+		downloadImgDir := path.Join(downloadsDir, folder.Path)
+		err = os.MkdirAll(downloadImgDir, 0666)
+		if err != nil {
+			log.Printf("Could not make download folder %v: %v", downloadImgDir, err)
+			continue
+		}
+
+		img.Optimize(ctx, opt, archiveImgDir, downloadImgDir, progress)
 	}
 
 	nested, err := folder.GetNested(ctx)
