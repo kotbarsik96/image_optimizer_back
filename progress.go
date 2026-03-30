@@ -11,9 +11,16 @@ const (
 	EProgressStorageOptimizations EProgressActionName = "optimizations"
 )
 
+func EProgressActions() []EProgressActionName {
+	return []EProgressActionName{
+		EProgressStorageOptimizations,
+	}
+}
+
 type Progress struct {
 	ActionName EProgressActionName
 	ActionID   uint
+	UploaderID uint
 	Stream     *ProgressStream
 	mu         sync.Mutex
 	completed  uint
@@ -23,7 +30,7 @@ type Progress struct {
 func (p *Progress) Increment() {
 	p.mu.Lock()
 	p.completed += 1
-	percent := p.getPercent()
+	percent := p.GetPercent()
 	p.mu.Unlock()
 
 	select {
@@ -43,7 +50,7 @@ func (p *Progress) Finish() {
 	}
 }
 
-func (p *Progress) getPercent() float64 {
+func (p *Progress) GetPercent() float64 {
 	total := float64(p.total)
 	if total == 0 {
 		return 0
@@ -56,12 +63,13 @@ type TProgressesStorage struct {
 	progresses []*Progress
 }
 
-func (ps *TProgressesStorage) NewProgress(actionName EProgressActionName, actionID uint, total uint) *Progress {
+func (ps *TProgressesStorage) NewProgress(actionName EProgressActionName, actionID uint, uploaderID, total uint) *Progress {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	p := &Progress{
 		ActionName: actionName,
 		ActionID:   actionID,
+		UploaderID: uploaderID,
 		total:      total,
 		Stream:     NewProgressStream(),
 	}
@@ -79,6 +87,19 @@ func (ps *TProgressesStorage) GetProgress(actionName EProgressActionName, action
 		}
 	}
 	return nil, fmt.Errorf("Progress %v.%v not found", actionName, actionID)
+}
+
+func (ps *TProgressesStorage) GetUploaderProgresses(uploaderID uint) []*Progress {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+
+	list := []*Progress{}
+	for _, p := range ps.progresses {
+		if p.UploaderID == uploaderID {
+			list = append(list, p)
+		}
+	}
+	return list
 }
 
 func (ps *TProgressesStorage) FinishProgress(p *Progress) {

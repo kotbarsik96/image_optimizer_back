@@ -516,7 +516,7 @@ func RouteGetOptimizationsList(c *gin.Context) {
 
 	project := c.MustGet("project").(Project)
 
-	optimizations, err := gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(ctx)
+	optimizations, err := gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Order("created_at desc").Find(ctx)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrInternal("Could not get optimizations", err),
@@ -649,7 +649,26 @@ func RouteDownloadOptimization(c *gin.Context) {
 	c.FileAttachment(zipFilepath, optimization.Title+".zip")
 }
 
-// events
+// progress
+
+func RouteProgressSync(c *gin.Context) {
+	uploader := c.MustGet("uploader").(Uploader)
+	actions := EProgressActions()
+
+	list := make(map[EProgressActionName]map[uint]float64)
+
+	for _, actionName := range actions {
+		list[actionName] = make(map[uint]float64)
+	}
+
+	for _, progress := range ProgressesStorage.GetUploaderProgresses(uploader.ID) {
+		list[progress.ActionName][progress.ActionID] = progress.GetPercent()
+	}
+
+	RespondOk(c, Response{
+		Data: list,
+	})
+}
 
 func RouteOptimizationProgress(c *gin.Context) {
 	optimization := c.MustGet("optimization").(Optimization)

@@ -78,8 +78,9 @@ func ListRoutes() {
 		optimizations.GET("/archive/:optimization_id", OptimizationAuthMiddleware(), RouteDownloadOptimization)
 	}
 
-	events := router.Group("/events", AuthMiddleware(), SSEHeadersMiddleware())
+	router.GET("/progress/sync", AuthMiddleware(), RouteProgressSync)
+	progress := router.Group("/progress", AuthMiddleware(), SSEHeadersMiddleware())
 	{
-		events.GET("/optimizations/:optimization_id", OptimizationAuthMiddleware(), RouteOptimizationProgress)
+		progress.GET("/optimizations/:optimization_id", OptimizationAuthMiddleware(), RouteOptimizationProgress)
 	}
 }

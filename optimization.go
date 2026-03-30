@@ -167,5 +167,5 @@ func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Proj
 
 	// imagesCount + операция по созданию архива
 	total := uint(imagesCount + 1)
-	return ProgressesStorage.NewProgress(EProgressStorageOptimizations, o.ID, total)
+	return ProgressesStorage.NewProgress(EProgressStorageOptimizations, o.ID, project.UploaderID, total)
 }
