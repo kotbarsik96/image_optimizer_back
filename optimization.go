@@ -74,8 +74,22 @@ func GetOptimizationSizes(sizesRaw string) ([]int, error) {
 	return sizes, nil
 }
 
-func (optimization *Optimization) Delete(ctx context.Context) error {
-	_, err := gorm.G[Optimization](gormDb).Where("id = ?", optimization.ID).Delete(ctx)
+func (o *Optimization) GetOptPath(ctx context.Context) string {
+	uploader, err := gorm.G[Uploader](gormDb).Where(`id = (
+		SELECT uploader_id FROM projects WHERE id = ?
+	)`, o.ProjectID).First(ctx)
+	if err != nil {
+		return ""
+	}
+
+	storageLocal := Storages[EStorageLocal].(StorageLocal)
+	return path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), o.Title)
+}
+
+func (o *Optimization) Delete(ctx context.Context) error {
+	path := o.GetOptPath(ctx)
+	os.RemoveAll(path)
+	_, err := gorm.G[Optimization](gormDb).Where("id = ?", o.ID).Delete(ctx)
 	return err
 }
 
@@ -100,16 +114,10 @@ func (o *Optimization) Start() {
 		log.Fatalf("project not found for opt %v: %v\n", o.ID, err)
 	}
 
-	uploader, err := gorm.G[Uploader](gormDb).Where("id = ?", project.UploaderID).First(ctx)
-	if err != nil {
-		log.Fatalf("uploader not found for project %v: %v\n", project.ID, err)
-	}
-
 	log.Printf("Optimization %v started\n", o.Title)
 
-	storageLocal := Storages[EStorageLocal].(StorageLocal)
 	// [OPT_PATH]
-	optPath := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), o.Title)
+	optPath := o.GetOptPath(ctx)
 
 	tempDir := o.CreateDirFatal(optPath, "temp")
 	archiveDir := o.CreateDirFatal(tempDir, "archive")

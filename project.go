@@ -28,22 +28,31 @@ func (project *Project) GetRootFolder(ctx context.Context) (Folder, error) {
 }
 
 // удалить проект и корневую папку. Удалит все связанные с проектом папки и изображения
-func (project *Project) Delete(ctx context.Context) error {
-	rootFolder, err := project.GetRootFolder(ctx)
+func (p *Project) Delete(ctx context.Context) error {
+	rootFolder, err := p.GetRootFolder(ctx)
 	if err != nil {
-		log.Printf("Project %v's root folder not found: %v", project.Title, err)
+		log.Printf("Project %v's root folder not found: %v", p.Title, err)
 	}
 
 	err = rootFolder.DeleteEvenIfRoot(ctx)
 	if err != nil {
-		log.Printf("Could not delete project %v's root folder: %v", project.Title, err)
+		log.Printf("Could not delete project %v's root folder: %v", p.Title, err)
 	}
 
-	_, err = gorm.G[Project](gormDb).Where("id = ?", project.ID).Delete(ctx)
+	optimizations, err := p.GetOptimizations(ctx)
+	if err != nil {
+		log.Printf("Could not get optimizations of project %v to delete: %v", p.Title, err)
+	}
+
+	for _, o := range optimizations {
+		o.Delete(ctx)
+	}
+
+	_, err = gorm.G[Project](gormDb).Where("id = ?", p.ID).Delete(ctx)
 
 	return err
 }
 
-func (project *Project) GetOptimizations(ctx context.Context) ([]Optimization, error) {
-	return gorm.G[Optimization](gormDb).Where("project_id = ?", project.ID).Find(ctx)
+func (p *Project) GetOptimizations(ctx context.Context) ([]Optimization, error) {
+	return gorm.G[Optimization](gormDb).Where("project_id = ?", p.ID).Find(ctx)
 }
