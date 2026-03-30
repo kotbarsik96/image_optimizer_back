@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -87,20 +86,14 @@ func RouteNewProject(c *gin.Context) {
 		return
 	}
 
-	// responseData := []UploadData{}
-	// if c.ContentType() == "multipart/form-data" {
-	// 	form, err := c.MultipartForm()
-	// 	if err != nil {
-	// 		log.Printf("Could not get multipart form: %v\n", err)
-	// 	}
-
-	// 	images := form.File["images"]
-	// 	responseData = UploadProjectImages(ctx, uploader, folder, images)
-	// }
+	form, err := c.MultipartForm()
+	if err == nil {
+		imageFiles := form.File["images"]
+		go uploader.UploadFiles(folder, imageFiles)
+	}
 
 	RespondCreated(c, Response{
 		Data: gin.H{
-			// "uploads": responseData,
 			"project": project,
 		},
 		Message: fmt.Sprintf("Project %v created", project.Title),
@@ -316,7 +309,6 @@ func RouteDeleteFolder(c *gin.Context) {
 func RouteUploadFiles(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
-	project := c.MustGet("project").(Project)
 
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -328,31 +320,7 @@ func RouteUploadFiles(c *gin.Context) {
 
 	imageFiles := form.File["images"]
 
-	storage := Storages[folder.Storage]
-
-	go func() {
-		ctx := context.Background()
-
-		for _, imgFileHeader := range imageFiles {
-			// путь к папке изображения
-			dirPath := path.Join(uploader.GetProjectsPath(), project.Title, folder.Path)
-
-			// полный путь к изображению
-			imgPath := path.Join(dirPath, imgFileHeader.Filename)
-
-			img, err := NewImageFromFile(imgFileHeader, folder, imgPath)
-			if err != nil {
-				continue
-			}
-
-			err = storage.PutImage(ctx, imgPath, imgFileHeader)
-			if err != nil {
-				continue
-			}
-
-			err = gorm.G[Image](gormDb).Create(ctx, img)
-		}
-	}()
+	go uploader.UploadFiles(folder, imageFiles)
 
 	RespondCreated(c, Response{
 		Data: gin.H{

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
+	"mime/multipart"
 	"path"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Uploader struct {
@@ -23,4 +27,37 @@ func (u *Uploader) GetProjectsPath() string {
 
 func (u *Uploader) GetOptimizationsPath() string {
 	return path.Join(u.GetFolderPath(), "optimizations")
+}
+
+func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) error {
+	ctx := context.Background()
+
+	project, err := gorm.G[Project](gormDb).Where("id = ?", folder.ProjectID).First(ctx)
+	if err != nil {
+		return err
+	}
+
+	storage := Storages[folder.Storage]
+
+	for _, fileHeader := range files {
+		// путь к папке
+		dirPath := path.Join(u.GetProjectsPath(), project.Title, folder.Path)
+
+		// полный путь к файлу
+		imgPath := path.Join(dirPath, fileHeader.Filename)
+
+		img, err := NewImageFromFile(fileHeader, folder, imgPath)
+		if err != nil {
+			continue
+		}
+
+		err = storage.PutImage(ctx, imgPath, fileHeader)
+		if err != nil {
+			continue
+		}
+
+		err = gorm.G[Image](gormDb).Create(ctx, img)
+	}
+
+	return nil
 }

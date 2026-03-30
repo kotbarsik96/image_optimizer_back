@@ -111,20 +111,40 @@ func (storage StorageLocal) PutImage(ctx context.Context, destPath string, fileH
 }
 
 func (storage StorageLocal) Remove(ctx context.Context, destPath string) error {
-	return os.Remove(destPath)
+	return os.Remove(path.Join(storage.RootPath, destPath))
 }
 
-func (storage StorageLocal) RemoveFiles(ctx context.Context, destPaths []string) error {
+func (storage StorageLocal) RemoveFiles(ctx context.Context, destPaths []string) (err error) {
 	if len(destPaths) < 1 {
 		return nil
 	}
 
-	var err error
-	for _, pt := range destPaths {
-		err = os.Remove(pt)
+	for i, p := range destPaths {
+		destPaths[i] = path.Join(storage.RootPath, p)
 	}
 
-	return fmt.Errorf("Not all files are removed. Last error: %w", err)
+	for _, pt := range destPaths {
+		err = os.Remove(pt)
+		if err != nil {
+			continue
+		}
+
+		dirPath := path.Dir(pt)
+		isEmpty, err := IsDirEmpty(dirPath)
+		if err != nil {
+			continue
+		}
+
+		if isEmpty {
+			os.Remove(dirPath)
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("Not all files are removed. Last error: %w", err)
+	}
+
+	return nil
 }
 
 // хранилище S3
@@ -204,6 +224,10 @@ func (storage StorageS3) RemoveFiles(ctx context.Context, destPaths []string) er
 
 	if len(destPaths) == 0 {
 		return nil
+	}
+
+	for i, p := range destPaths {
+		destPaths[i] = path.Join(storage.RootPath, p)
 	}
 
 	objects := []types.ObjectIdentifier{}

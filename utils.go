@@ -119,3 +119,17 @@ func CopyFile(destPath, srcPath string) error {
 
 	return destFile.Sync()
 }
+
+func IsDirEmpty(dirPath string) (bool, error) {
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		return false, err
+	}
+	defer dir.Close()
+
+	_, err = dir.Readdirnames(1)
+	if err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
