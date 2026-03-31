@@ -157,8 +157,10 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, archiveImgDi
 	// полный путь к оригинальному изображению
 	originalFilePath := path.Join(downloadImgDir, originalFileName)
 
+	imageFullPath := path.Join(image.Path, image.Filename+"."+image.Extension)
+
 	// скачивание изображения в путь originalFilePath
-	_, err := storage.Download(ctx, image.Path, originalFilePath)
+	_, err := storage.Download(ctx, imageFullPath, originalFilePath)
 	if err != nil {
 		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.Filename, image.Extension, opt.Title, err)
 		return
