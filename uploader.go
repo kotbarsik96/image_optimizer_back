@@ -40,16 +40,14 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 	storage := Storages[folder.Storage]
 
 	for _, fileHeader := range files {
-		// путь к папке
 		dirPath := path.Join(u.GetProjectsPath(), project.Title, folder.Path)
 
-		// полный путь к файлу
-		imgPath := path.Join(dirPath, fileHeader.Filename)
-
-		img, err := NewImageFromFile(fileHeader, folder, imgPath)
+		img, err := NewImageFromFile(fileHeader, folder, dirPath)
 		if err != nil {
 			continue
 		}
+
+		imgPath := path.Join(dirPath, img.Filename+"."+img.Extension)
 
 		err = storage.PutImage(ctx, imgPath, fileHeader)
 		if err != nil {

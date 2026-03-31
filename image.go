@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"mime/multipart"
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,31 +31,32 @@ type Image struct {
 	UpdatedAt time.Time `json:"updated_at,omitzero"`
 }
 
-func (image *Image) GetUrl() string {
-	if image.Storage == EStorageLocal {
+func (i *Image) GetUrl() string {
+	if i.Storage == EStorageLocal {
 		return ""
 	}
 
 	storage := Storages[EStorageS3].(StorageS3)
-	return storage.EndpointUrl + "/" + path.Join(storage.Bucket, storage.RootPath, url.PathEscape(image.Path))
+	relPath := path.Join(url.PathEscape(i.Path), url.PathEscape(i.Filename+"."+i.Extension))
+	return storage.EndpointUrl + "/" + path.Join(storage.Bucket, storage.RootPath, relPath)
 }
 
-func (image *Image) Delete(ctx context.Context) error {
-	storage := Storages[image.Storage]
+func (i *Image) Delete(ctx context.Context) error {
+	storage := Storages[i.Storage]
 
-	err := storage.Remove(ctx, image.Path)
+	err := storage.Remove(ctx, i.Path)
 	if err != nil {
 		return err
 	}
 
-	_, err = gorm.G[Image](gormDb).Where("id = ?", image.ID).Delete(ctx)
+	_, err = gorm.G[Image](gormDb).Where("id = ?", i.ID).Delete(ctx)
 	return err
 }
 
 // Сформировать Image на основе переданного файла и пути
 //
-// imgPath - путь к изображению с названием файла и расширением (/path/to/img.png)
-func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, imgPath string) (*Image, error) {
+// dirPath - путь к папке изображения (/path/to)
+func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, dirPath string) (*Image, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return nil, err
@@ -61,27 +64,70 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, imgPath s
 	defer file.Close()
 
 	extension := strings.ToLower(path.Ext(fileHeader.Filename))[1:]
-	filename := GetFilenameWithoutExtension(imgPath)
+	filename := GetFilenameWithoutExtension(fileHeader.Filename)
 
 	img := Image{
 		FolderID:  folder.ID,
-		Path:      imgPath,
+		Path:      dirPath,
 		Filename:  filename,
 		Extension: extension,
 		SizeBytes: uint(fileHeader.Size),
 		Storage:   folder.Storage,
 	}
 
+	filename, err = img.CreateNotDuplicatedFilename(context.Background(), img.Filename, folder)
+	if err != nil {
+		return nil, err
+	}
+	if filename != img.Filename {
+		img.Filename = filename
+	}
+
 	return &img, nil
 }
 
-func (image *Image) AfterFind(tx *gorm.DB) (err error) {
-	image.Url = image.GetUrl()
+func (i *Image) CreateNotDuplicatedFilename(ctx context.Context, filename string, folder Folder) (string, error) {
+	_, err := gorm.G[Image](gormDb).Where("folder_id = ? AND filename = ?", folder.ID, filename).First(ctx)
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return filename, nil
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	num := 2
+	newName := filename + "-" + strconv.Itoa(num)
+	for {
+		dup, err := gorm.G[Image](gormDb).
+			Where("folder_id = ? AND filename = ?", folder.ID, newName).
+			Order("filename desc").
+			First(ctx)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			break
+		}
+
+		if i := strings.LastIndexByte(dup.Filename, '-'); i >= 0 {
+			dupNum, err := strconv.Atoi(dup.Filename[i+1:])
+			if err == nil {
+				newName = filename + "-" + strconv.Itoa(dupNum+1)
+			} else {
+				log.Printf("Failed to create not duplicated filename: %v", err)
+			}
+		}
+	}
+
+	return newName, nil
+}
+
+func (i *Image) AfterFind(tx *gorm.DB) (err error) {
+	i.Url = i.GetUrl()
 	return
 }
 
-func (image *Image) AfterCreate(tx *gorm.DB) (err error) {
-	image.Url = image.GetUrl()
+func (i *Image) AfterCreate(tx *gorm.DB) (err error) {
+	i.Url = i.GetUrl()
 	return
 }
 
