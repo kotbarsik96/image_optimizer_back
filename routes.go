@@ -389,6 +389,45 @@ func RouteRenameFolder(c *gin.Context) {
 
 // images
 
+func RouteGetImage(c *gin.Context) {
+	ctx := c.Request.Context()
+	uploader := c.MustGet("uploader").(Uploader)
+	image := c.MustGet("image").(Image)
+
+	imgPath := path.Join(image.Path, image.Filename+"."+image.Extension)
+	var attachmentPath string
+
+	var storage IStorage
+	storage = Storages[image.Storage]
+
+	switch storage := storage.(type) {
+	case StorageLocal:
+		attachmentPath = path.Join(storage.RootPath, imgPath)
+	case StorageS3:
+		attachmentPath := path.Join(uploader.GetDownloadsDir(), strings.ReplaceAll(imgPath, "/", "-"))
+		storage.Download(ctx, imgPath, attachmentPath)
+		defer func() {
+			os.Remove(attachmentPath)
+		}()
+	}
+
+	_, err := os.Stat(attachmentPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			RespondError(c, Response{
+				Error: ErrNotFound("Image not found", err),
+			})
+		} else {
+			RespondError(c, Response{
+				Error: ErrInternal("", err),
+			})
+		}
+		return
+	}
+
+	c.FileAttachment(attachmentPath, image.Filename+"."+image.Extension)
+}
+
 func RouteDeleteImage(c *gin.Context) {
 	ctx := c.Request.Context()
 

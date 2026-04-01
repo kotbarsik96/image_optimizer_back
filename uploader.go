@@ -25,6 +25,10 @@ func (u *Uploader) GetProjectsPath() string {
 	return path.Join(u.GetFolderPath(), "projects")
 }
 
+func (u *Uploader) GetDownloadsDir() string {
+	return path.Join(u.GetFolderPath(), "downloads")
+}
+
 func (u *Uploader) GetOptimizationsPath() string {
 	return path.Join(u.GetFolderPath(), "optimizations")
 }
