@@ -25,7 +25,7 @@ func EncodeImageToExtension(inputPath, outputPath string) error {
 
 	switch outputExt {
 	case "avif":
-		command = exec.Command("avifenc", "-q", "75", "-s", "0", inputPath, outputPath)
+		command = exec.Command("avifenc", "-q", "75", "-s", "3", inputPath, outputPath)
 	default:
 		return fmt.Errorf("%v: %w", outputExt, ErrNotSupportedExtension)
 	}
