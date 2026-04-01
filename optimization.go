@@ -132,7 +132,8 @@ func (o *Optimization) Start() {
 	progress := o.NewOptimizationProgress(ctx, project)
 
 	// подготовка завершена: запуск оптимизации с корневой папки
-	rootFolder.OptimizeImages(ctx, *o, archiveDir, downloadsDir, progress)
+	sema := make(chan int, 4)
+	rootFolder.OptimizeImages(ctx, sema, *o, archiveDir, downloadsDir, progress)
 
 	log.Printf("Optimization %v done\n", o.Title)
 

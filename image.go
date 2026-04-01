@@ -131,7 +131,9 @@ func (i *Image) AfterCreate(tx *gorm.DB) (err error) {
 }
 
 func (image *Image) Optimize(ctx context.Context, opt Optimization, archiveImgDir, downloadImgDir string, progress *Progress) {
-	defer progress.Increment()
+	defer func() {
+		progress.Increment()
+	}()
 
 	sizes, _ := GetOptimizationSizes(opt.Sizes)
 	extensions, _ := GetOptimizationExtensions(opt.Extensions)
