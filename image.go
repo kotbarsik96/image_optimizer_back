@@ -19,7 +19,7 @@ import (
 type Image struct {
 	ID               uint      `gorm:"primarykey" json:"id"`
 	FolderID         uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
-	Path             string    `json:"key,omitzero"` // путь в хранилище (s3, local). Может отличаться от пути папки Folder
+	StoragePath      string    `json:"key,omitzero"` // путь в хранилище (s3, local). Может отличаться от пути Folder.Path
 	Extension        string    `json:"extension,omitzero"`
 	Filename         string    `json:"filename,omitzero"`          // название, отображаемое пользователю, которое можно поменять
 	OriginalFilename string    `json:"original_filename,omitzero"` // название для идентификации в хранилище. Задаётся при загрузке изображения и не меняется
@@ -38,14 +38,14 @@ func (i *Image) GetUrl() string {
 	}
 
 	storage := Storages[EStorageS3].(StorageS3)
-	relPath := path.Join(url.PathEscape(i.Path), url.PathEscape(i.OriginalFilename+"."+i.Extension))
+	relPath := path.Join(url.PathEscape(i.StoragePath), url.PathEscape(i.OriginalFilename+"."+i.Extension))
 	return storage.EndpointUrl + "/" + path.Join(storage.Bucket, storage.RootPath, relPath)
 }
 
 func (i *Image) Delete(ctx context.Context) error {
 	storage := Storages[i.Storage]
 
-	err := storage.Remove(ctx, path.Join(i.Path, i.OriginalFilename+"."+i.Extension))
+	err := storage.Remove(ctx, path.Join(i.StoragePath, i.OriginalFilename+"."+i.Extension))
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, dirPath s
 
 	img := Image{
 		FolderID:         folder.ID,
-		Path:             dirPath,
+		StoragePath:      dirPath,
 		Filename:         filename,
 		OriginalFilename: filename,
 		Extension:        extension,
@@ -158,7 +158,7 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, archiveImgDi
 	// полный путь к оригинальному изображению
 	originalFilePath := path.Join(downloadImgDir, originalFileName)
 
-	imageFullPath := path.Join(image.Path, image.OriginalFilename+"."+image.Extension)
+	imageFullPath := path.Join(image.StoragePath, image.OriginalFilename+"."+image.Extension)
 
 	// скачивание изображения в путь originalFilePath
 	_, err := storage.Download(ctx, imageFullPath, originalFilePath)

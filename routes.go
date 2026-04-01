@@ -394,7 +394,7 @@ func RouteGetImage(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	image := c.MustGet("image").(Image)
 
-	imgPath := path.Join(image.Path, image.Filename+"."+image.Extension)
+	imgPath := path.Join(image.StoragePath, image.Filename+"."+image.Extension)
 	var attachmentPath string
 
 	var storage IStorage
@@ -441,7 +441,7 @@ func RouteDeleteImage(c *gin.Context) {
 	}
 
 	RespondOk(c, Response{
-		Message: fmt.Sprintf("Image %v was deleted", image.Filename),
+		Message: fmt.Sprintf("Image %v.%v was deleted", image.Filename, image.Extension),
 	})
 }
 

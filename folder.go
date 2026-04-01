@@ -64,7 +64,7 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 
 	for _, img := range images {
 		imageIds = append(imageIds, img.ID)
-		imagePaths = append(imagePaths, path.Join(img.Path, img.OriginalFilename+"."+img.Extension))
+		imagePaths = append(imagePaths, path.Join(img.StoragePath, img.OriginalFilename+"."+img.Extension))
 	}
 
 	storage := Storages[folder.Storage]
