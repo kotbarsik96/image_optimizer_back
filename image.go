@@ -17,18 +17,19 @@ import (
 )
 
 type Image struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	FolderID  uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
-	Path      string    `json:"key,omitzero"` // путь в хранилище (s3, local). Может отличаться от пути папки Folder
-	Extension string    `json:"extension,omitzero"`
-	Filename  string    `json:"filename,omitzero"`
-	Url       string    `gorm:"-" json:"url"`
-	SizeBytes uint      `json:"size_bytes,omitzero"`
-	Width     uint      `json:"width,omitzero"`
-	Height    uint      `json:"height,omitzero"`
-	Storage   EStorage  `json:"storage"`
-	CreatedAt time.Time `json:"created_at,omitzero"`
-	UpdatedAt time.Time `json:"updated_at,omitzero"`
+	ID               uint      `gorm:"primarykey" json:"id"`
+	FolderID         uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"folder_id,omitzero"`
+	Path             string    `json:"key,omitzero"` // путь в хранилище (s3, local). Может отличаться от пути папки Folder
+	Extension        string    `json:"extension,omitzero"`
+	Filename         string    `json:"filename,omitzero"`          // название, отображаемое пользователю, которое можно поменять
+	OriginalFilename string    `json:"original_filename,omitzero"` // название для идентификации в хранилище. Задаётся при загрузке изображения и не меняется
+	Url              string    `gorm:"-" json:"url"`
+	SizeBytes        uint      `json:"size_bytes,omitzero"`
+	Width            uint      `json:"width,omitzero"`
+	Height           uint      `json:"height,omitzero"`
+	Storage          EStorage  `json:"storage"`
+	CreatedAt        time.Time `json:"created_at,omitzero"`
+	UpdatedAt        time.Time `json:"updated_at,omitzero"`
 }
 
 func (i *Image) GetUrl() string {
@@ -37,14 +38,14 @@ func (i *Image) GetUrl() string {
 	}
 
 	storage := Storages[EStorageS3].(StorageS3)
-	relPath := path.Join(url.PathEscape(i.Path), url.PathEscape(i.Filename+"."+i.Extension))
+	relPath := path.Join(url.PathEscape(i.Path), url.PathEscape(i.OriginalFilename+"."+i.Extension))
 	return storage.EndpointUrl + "/" + path.Join(storage.Bucket, storage.RootPath, relPath)
 }
 
 func (i *Image) Delete(ctx context.Context) error {
 	storage := Storages[i.Storage]
 
-	err := storage.Remove(ctx, i.Path)
+	err := storage.Remove(ctx, path.Join(i.Path, i.OriginalFilename+"."+i.Extension))
 	if err != nil {
 		return err
 	}
@@ -64,30 +65,28 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, dirPath s
 	defer file.Close()
 
 	extension := strings.ToLower(path.Ext(fileHeader.Filename))[1:]
-	filename := GetFilenameWithoutExtension(fileHeader.Filename)
-
-	img := Image{
-		FolderID:  folder.ID,
-		Path:      dirPath,
-		Filename:  filename,
-		Extension: extension,
-		SizeBytes: uint(fileHeader.Size),
-		Storage:   folder.Storage,
-	}
-
-	filename, err = img.CreateNotDuplicatedFilename(context.Background(), img.Filename, folder)
+	nameWithoutExt := GetFilenameWithoutExtension(fileHeader.Filename)
+	filename, err := CreateNotDuplicatedFilename(context.Background(), nameWithoutExt, extension, folder)
 	if err != nil {
 		return nil, err
 	}
-	if filename != img.Filename {
-		img.Filename = filename
+
+	img := Image{
+		FolderID:         folder.ID,
+		Path:             dirPath,
+		Filename:         filename,
+		OriginalFilename: filename,
+		Extension:        extension,
+		SizeBytes:        uint(fileHeader.Size),
+		Storage:          folder.Storage,
 	}
 
 	return &img, nil
 }
 
-func (i *Image) CreateNotDuplicatedFilename(ctx context.Context, filename string, folder Folder) (string, error) {
-	_, err := gorm.G[Image](gormDb).Where("folder_id = ? AND filename = ?", folder.ID, filename).First(ctx)
+// filename - без расширения
+func CreateNotDuplicatedFilename(ctx context.Context, filename, extension string, folder Folder) (string, error) {
+	_, err := gorm.G[Image](gormDb).Where("folder_id = ? AND filename = ? AND extension = ?", folder.ID, filename, extension).First(ctx)
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return filename, nil
@@ -101,7 +100,7 @@ func (i *Image) CreateNotDuplicatedFilename(ctx context.Context, filename string
 	newName := filename + "-" + strconv.Itoa(num)
 	for {
 		dup, err := gorm.G[Image](gormDb).
-			Where("folder_id = ? AND filename = ?", folder.ID, newName).
+			Where("folder_id = ? AND filename = ? AND extension = ?", folder.ID, newName, extension).
 			Order("filename desc").
 			First(ctx)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -157,12 +156,12 @@ func (image *Image) Optimize(ctx context.Context, opt Optimization, archiveImgDi
 	// полный путь к оригинальному изображению
 	originalFilePath := path.Join(downloadImgDir, originalFileName)
 
-	imageFullPath := path.Join(image.Path, image.Filename+"."+image.Extension)
+	imageFullPath := path.Join(image.Path, image.OriginalFilename+"."+image.Extension)
 
 	// скачивание изображения в путь originalFilePath
 	_, err := storage.Download(ctx, imageFullPath, originalFilePath)
 	if err != nil {
-		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.Filename, image.Extension, opt.Title, err)
+		log.Printf("Error while downloading image %v.%v for optimization %v: %v", image.OriginalFilename, image.Extension, opt.Title, err)
 		return
 	}
 

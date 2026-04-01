@@ -47,7 +47,7 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 			continue
 		}
 
-		imgPath := path.Join(dirPath, img.Filename+"."+img.Extension)
+		imgPath := path.Join(dirPath, img.OriginalFilename+"."+img.Extension)
 
 		err = storage.PutImage(ctx, imgPath, fileHeader)
 		if err != nil {

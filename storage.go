@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 type EStorage string
@@ -212,7 +213,42 @@ func (storage StorageS3) PutImage(ctx context.Context, destPath string, fileHead
 }
 
 func (storage StorageS3) Remove(ctx context.Context, destPath string) error {
-	return nil
+	key := path.Join(storage.RootPath, destPath)
+	bucket := storage.Bucket
+
+	client := storage.Actions.Client
+
+	input := &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	_, err := client.DeleteObject(ctx, input)
+	if err != nil {
+		var noKey *types.NoSuchKey
+		var apiErr *smithy.GenericAPIError
+		if errors.As(err, &noKey) {
+			log.Printf("Object %s does not exist in %s\n", key, bucket)
+			err = noKey
+		} else if errors.As(err, &apiErr) {
+			switch apiErr.ErrorCode() {
+			case "AccessDenied":
+				log.Printf("Access denied: cannot delete object %s from %s\n", key, bucket)
+				err = nil
+			}
+		}
+	} else {
+		err = s3.NewObjectNotExistsWaiter(client).Wait(
+			ctx,
+			&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)},
+			time.Minute,
+		)
+		if err != nil {
+			log.Printf("Failed attempt to wait for object %s in bucket %s to be deleted\n", key, bucket)
+		}
+	}
+
+	return err
 }
 
 func (storage StorageS3) RemoveFiles(ctx context.Context, destPaths []string) error {
