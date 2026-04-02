@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -132,4 +133,24 @@ func IsDirEmpty(dirPath string) (bool, error) {
 		return true, nil
 	}
 	return false, err
+}
+
+// получает на вход ext, приводя его в нижний регистр и убирая точку в начале, если есть. Приводит одноимённые расширения в единый формат (jpeg -> jpg). Если fixedExt не содержится в ESupportedOptimizationExtensions - вернёт err ErrNotSupportedExtension. Независимо от наличия ошибки, возвращает преобразованное ext как fixedExt
+func ToSupportedExtension(ext string) (fixedExt string, err error) {
+	ext = strings.ToLower(ext)
+
+	if ext[0] == '.' {
+		ext = ext[1:]
+	}
+
+	switch ext {
+	case "jpeg":
+		ext = "jpg"
+	}
+
+	if !slices.Contains(ESupportedOptimizationExtensions, ext) {
+		return ext, ErrNotSupportedExtension
+	}
+
+	return ext, nil
 }

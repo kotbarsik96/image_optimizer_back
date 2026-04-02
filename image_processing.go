@@ -15,8 +15,12 @@ func ResizeImage(inputPath, outputPath string, scale float64) error {
 }
 
 func EncodeImageToExtension(inputPath, outputPath string) error {
-	inputExt := path.Ext(inputPath)[1:]
-	outputExt := path.Ext(outputPath)[1:]
+	inputExt, _ := ToSupportedExtension(path.Ext(inputPath)[1:])
+	outputExt, err := ToSupportedExtension(path.Ext(outputPath))
+	if err != nil {
+		return fmt.Errorf("%w: %v", err, outputExt)
+	}
+
 	if inputExt == outputExt {
 		return CopyFile(outputPath, inputPath)
 	}
@@ -29,12 +33,13 @@ func EncodeImageToExtension(inputPath, outputPath string) error {
 	case "webp":
 		command = exec.Command("cwebp", "-q", "75", inputPath, "-o", outputPath)
 	case "png":
+	case "jpg":
 		command = exec.Command("magick", "-quality", "50", inputPath, outputPath)
 	default:
 		return fmt.Errorf("%v: %w", outputExt, ErrNotSupportedExtension)
 	}
 
-	_, err := command.CombinedOutput()
+	_, err = command.CombinedOutput()
 
 	return err
 }

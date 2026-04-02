@@ -64,7 +64,11 @@ func NewImageFromFile(fileHeader *multipart.FileHeader, folder Folder, dirPath s
 	}
 	defer file.Close()
 
-	extension := strings.ToLower(path.Ext(fileHeader.Filename))[1:]
+	extension, err := ToSupportedExtension(path.Ext(fileHeader.Filename)[1:])
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", err, extension)
+	}
+
 	nameWithoutExt := GetFilenameWithoutExtension(fileHeader.Filename)
 	filename, err := CreateNotDuplicatedFilename(context.Background(), nameWithoutExt, extension, folder)
 	if err != nil {
