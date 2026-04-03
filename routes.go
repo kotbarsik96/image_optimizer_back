@@ -660,17 +660,10 @@ func RouteDownloadOptimization(c *gin.Context) {
 
 func RouteProgressSync(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
-	actions := EProgressActions()
 
-	list := make(map[EProgressActionName]map[uint]float64)
-
-	for _, actionName := range actions {
-		list[actionName] = make(map[uint]float64)
-	}
-
-	for _, progress := range ProgressesStorage.GetUploaderProgresses(uploader.ID) {
-		list[progress.ActionName][progress.ActionID] = progress.GetPercent()
-	}
+	list := make(TProgressSyncActionsList)
+	ProgressStorageToList(list, uploader.ID, &OptimizationsProgressStorage)
+	ProgressStorageToList(list, uploader.ID, &UploadsProgressStorage)
 
 	RespondOk(c, Response{
 		Data: list,
@@ -679,7 +672,8 @@ func RouteProgressSync(c *gin.Context) {
 
 func RouteOptimizationProgress(c *gin.Context) {
 	optimization := c.MustGet("optimization").(Optimization)
-	progress, err := ProgressesStorage.GetProgress(EProgressStorageOptimizations, optimization.ID)
+
+	progress, err := OptimizationsProgressStorage.GetProgress(optimization.ID)
 	if err != nil {
 		RespondError(c, Response{
 			Error: ErrUnprocessableEntity("Optimization is not in progress", err),

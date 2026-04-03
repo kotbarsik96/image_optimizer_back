@@ -142,7 +142,7 @@ func (o *Optimization) Start() {
 	// файлы оптмизированы: сформировать архив
 	zipPath := path.Join(optPath, o.Title+".zip")
 	err = ZipDir(archiveDir, zipPath)
-	ProgressesStorage.FinishProgress(progress)
+	OptimizationsProgressStorage.FinishProgress(progress)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", o.Title, err)
@@ -166,7 +166,7 @@ func (o *Optimization) CreateDirFatal(rootPath, dirName string) string {
 	return outputDir
 }
 
-func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Project) *Progress {
+func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Project) *Progress[TOptimizationProgressStorageMeta] {
 	imagesCount, err := gorm.G[Image](gormDb).Where(`folder_id IN (
 		SELECT id FROM folders WHERE project_id = ?
 	)`, project.ID).Count(ctx, "id")
@@ -176,5 +176,5 @@ func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Proj
 
 	// imagesCount + операция по созданию архива
 	total := uint(imagesCount + 1)
-	return ProgressesStorage.NewProgress(EProgressStorageOptimizations, o.ID, project.UploaderID, total)
+	return OptimizationsProgressStorage.NewProgress(o.ID, project.UploaderID, total)
 }

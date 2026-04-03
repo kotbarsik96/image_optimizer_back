@@ -32,8 +32,7 @@ func EncodeImageToExtension(inputPath, outputPath string) error {
 		command = exec.Command("avifenc", "-q", "75", "-s", "3", inputPath, outputPath)
 	case "webp":
 		command = exec.Command("cwebp", "-q", "75", inputPath, "-o", outputPath)
-	case "png":
-	case "jpg":
+	case "png", "jpg":
 		command = exec.Command("magick", "-quality", "50", inputPath, outputPath)
 	default:
 		return fmt.Errorf("%v: %w", outputExt, ErrNotSupportedExtension)

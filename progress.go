@@ -5,29 +5,17 @@ import (
 	"sync"
 )
 
-type EProgressActionName string
-
-const (
-	EProgressStorageOptimizations EProgressActionName = "optimizations"
-)
-
-func EProgressActions() []EProgressActionName {
-	return []EProgressActionName{
-		EProgressStorageOptimizations,
-	}
-}
-
-type Progress struct {
-	ActionName EProgressActionName
+type Progress[T any] struct {
 	ActionID   uint
 	UploaderID uint
 	Stream     *ProgressStream
+	Meta       T
 	mu         sync.Mutex
 	completed  uint
 	total      uint
 }
 
-func (p *Progress) Increment() {
+func (p *Progress[T]) Increment() {
 	p.mu.Lock()
 	p.completed += 1
 	percent := p.GetPercent()
@@ -39,7 +27,7 @@ func (p *Progress) Increment() {
 	}
 }
 
-func (p *Progress) Finish() {
+func (p *Progress[T]) Finish() {
 	p.mu.Lock()
 	p.completed = p.total
 	p.mu.Unlock()
@@ -50,7 +38,7 @@ func (p *Progress) Finish() {
 	}
 }
 
-func (p *Progress) GetPercent() float64 {
+func (p *Progress[T]) GetPercent() float64 {
 	total := float64(p.total)
 	if total == 0 {
 		return 0
@@ -58,16 +46,16 @@ func (p *Progress) GetPercent() float64 {
 	return float64(p.completed) / total * 100
 }
 
-type TProgressesStorage struct {
+type TProgressesStorage[T any] struct {
+	Name       string
 	mu         sync.RWMutex
-	progresses []*Progress
+	progresses []*Progress[T]
 }
 
-func (ps *TProgressesStorage) NewProgress(actionName EProgressActionName, actionID uint, uploaderID, total uint) *Progress {
+func (ps *TProgressesStorage[T]) NewProgress(actionID uint, uploaderID, total uint) *Progress[T] {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	p := &Progress{
-		ActionName: actionName,
+	p := &Progress[T]{
 		ActionID:   actionID,
 		UploaderID: uploaderID,
 		total:      total,
@@ -78,22 +66,22 @@ func (ps *TProgressesStorage) NewProgress(actionName EProgressActionName, action
 	return p
 }
 
-func (ps *TProgressesStorage) GetProgress(actionName EProgressActionName, actionID uint) (*Progress, error) {
+func (ps *TProgressesStorage[T]) GetProgress(actionID uint) (*Progress[T], error) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 	for _, p := range ps.progresses {
-		if p.ActionName == actionName && p.ActionID == actionID {
+		if p.ActionID == actionID {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("Progress %v.%v not found", actionName, actionID)
+	return nil, fmt.Errorf("Progress %v.%v not found", ps.Name, actionID)
 }
 
-func (ps *TProgressesStorage) GetUploaderProgresses(uploaderID uint) []*Progress {
+func (ps *TProgressesStorage[T]) GetUploaderProgresses(uploaderID uint) []*Progress[T] {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
-	list := []*Progress{}
+	list := []*Progress[T]{}
 	for _, p := range ps.progresses {
 		if p.UploaderID == uploaderID {
 			list = append(list, p)
@@ -102,20 +90,16 @@ func (ps *TProgressesStorage) GetUploaderProgresses(uploaderID uint) []*Progress
 	return list
 }
 
-func (ps *TProgressesStorage) FinishProgress(p *Progress) {
+func (ps *TProgressesStorage[T]) FinishProgress(p *Progress[T]) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	p.Finish()
-	ps.progresses = FilterSlice(ps.progresses, func(index int, item *Progress, slice []*Progress) bool {
-		if item.ActionName == p.ActionName && item.ActionID == p.ActionID {
+	ps.progresses = FilterSlice(ps.progresses, func(index int, item *Progress[T], slice []*Progress[T]) bool {
+		if item.ActionID == p.ActionID {
 			return false
 		}
 		return true
 	})
-}
-
-var ProgressesStorage TProgressesStorage = TProgressesStorage{
-	progresses: []*Progress{},
 }
 
 type ProgressClientChan chan float64
@@ -173,5 +157,34 @@ func NewProgressStream() *ProgressStream {
 		NewClients:    make(chan ProgressClientChan),
 		ClosedClients: make(chan ProgressClientChan),
 		TotalClients:  make(map[ProgressClientChan]bool),
+	}
+}
+
+// регистрация TProgressStorage'й
+
+type TOptimizationProgressStorageMeta struct{}
+
+var OptimizationsProgressStorage TProgressesStorage[TOptimizationProgressStorageMeta] = TProgressesStorage[TOptimizationProgressStorageMeta]{
+	Name:       "optimizations",
+	progresses: []*Progress[TOptimizationProgressStorageMeta]{},
+}
+
+type TUploadProgressStorageMeta struct {
+}
+
+var UploadsProgressStorage TProgressesStorage[TUploadProgressStorageMeta] = TProgressesStorage[TUploadProgressStorageMeta]{
+	Name:       "uploads",
+	progresses: []*Progress[TUploadProgressStorageMeta]{},
+}
+
+type TProgressSyncActionsList map[string]TProgressSyncValuesList
+
+type TProgressSyncValuesList map[uint]float64
+
+func ProgressStorageToList[T any](list TProgressSyncActionsList, uploaderID uint, ps *TProgressesStorage[T]) {
+	list[ps.Name] = TProgressSyncValuesList{}
+
+	for _, progress := range ps.GetUploaderProgresses(uploaderID) {
+		list[ps.Name][progress.ActionID] = progress.GetPercent()
 	}
 }

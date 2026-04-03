@@ -93,7 +93,7 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	return err
 }
 
-func (folder *Folder) OptimizeImages(ctx context.Context, sema chan int, opt Optimization, archiveDir, downloadsDir string, progress *Progress) {
+func (folder *Folder) OptimizeImages(ctx context.Context, sema chan int, opt Optimization, archiveDir, downloadsDir string, progress *Progress[TOptimizationProgressStorageMeta]) {
 	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
 	if err != nil {
 		log.Printf("Could not get images of %v: %v", folder.Path, err)
