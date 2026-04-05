@@ -15,16 +15,29 @@ import (
 )
 
 type Folder struct {
-	ID             uint      `gorm:"primarykey" json:"id"`
-	ProjectID      *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
-	OptimizationID *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
-	Path           string    `json:"path,omitzero"`
-	ParentID       *uint     `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id,omitzero"`
-	Nested         []Folder  `gorm:"foreignKey:ParentID" json:"nested,omitzero"`
-	Images         []Image   `json:"images,omitzero"`
-	Storage        EStorage  `json:"storage"`
-	CreatedAt      time.Time `json:"created_at,omitzero"`
-	UpdatedAt      time.Time `json:"updated_at,omitzero"`
+	ID             uint           `gorm:"primarykey" json:"id"`
+	ProjectID      *uint          `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id,omitzero"`
+	OptimizationID *uint          `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"optimization_id,omitzero"`
+	Path           string         `json:"path,omitzero"`
+	ParentID       *uint          `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"parent_id,omitzero"`
+	Nested         []Folder       `gorm:"foreignKey:ParentID" json:"nested,omitzero"`
+	Images         []Image        `json:"images,omitzero"`
+	Storage        EStorage       `json:"storage"`
+	ProgressStatus ProgressStatus `json:"progress_status"`
+	CreatedAt      time.Time      `json:"created_at,omitzero"`
+	UpdatedAt      time.Time      `json:"updated_at,omitzero"`
+}
+
+func (f *Folder) GetID() uint {
+	return f.ID
+}
+
+func (f *Folder) SetProgressStatus(ps ProgressStatus) {
+	f.ProgressStatus = ps
+	err := gormDb.Save(f)
+	if err != nil {
+		log.Printf("Could not save progress status %v for folder %v: %v\n", ps, f.Path, err)
+	}
 }
 
 func (folder *Folder) GetNested(ctx context.Context) ([]Folder, error) {
@@ -93,7 +106,7 @@ func (folder *Folder) DeleteEvenIfRoot(ctx context.Context) error {
 	return err
 }
 
-func (folder *Folder) OptimizeImages(ctx context.Context, sema chan int, opt Optimization, archiveDir, downloadsDir string, progress *Progress[TOptimizationProgressStorageMeta]) {
+func (folder *Folder) OptimizeImages(ctx context.Context, sema chan int, opt Optimization, archiveDir, downloadsDir string, progress *Progress) {
 	images, err := gorm.G[Image](gormDb).Where("folder_id = ?", folder.ID).Find(ctx)
 	if err != nil {
 		log.Printf("Could not get images of %v: %v", folder.Path, err)

@@ -41,24 +41,42 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 		return err
 	}
 
-	storage := Storages[folder.Storage]
-
+	details := TProgressDetails{}
+	images := []*Image{}
 	for _, fileHeader := range files {
 		dirPath := path.Join(u.GetProjectsPath(), project.Title, folder.Path)
-
 		img, err := NewImageFromFile(fileHeader, folder, dirPath)
+
+		detail := TProgressDetailItem{
+			Meta: map[string]any{"image": img},
+		}
 		if err != nil {
+			detail.Error = err
+		}
+		details[img.Filename] = detail
+		images = append(images, img)
+	}
+
+	totalCount := uint(len(details))
+	progress := UploadsProgressStorage.NewProgress(&folder, u.ID, totalCount, details)
+
+	fileStorage := Storages[folder.Storage]
+	for i, img := range images {
+		if details[img.Filename].Error != nil {
+			UploadsProgressStorage.Increment(progress)
 			continue
 		}
 
-		imgPath := path.Join(dirPath, img.OriginalFilename+"."+img.Extension)
+		imgPath := path.Join(img.StoragePath, img.OriginalFilename+"."+img.Extension)
 
-		err = storage.PutImage(ctx, imgPath, fileHeader)
-		if err != nil {
-			continue
+		err = fileStorage.PutImage(ctx, imgPath, files[i])
+		if err == nil {
+			err = gorm.G[Image](gormDb).Create(ctx, img)
 		}
 
-		err = gorm.G[Image](gormDb).Create(ctx, img)
+		UploadsProgressStorage.IncrementWithDetails(progress, img.Filename, TProgressDetailItem{Error: err})
+
+		time.Sleep(2 * time.Second) //temp
 	}
 
 	return nil

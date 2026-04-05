@@ -25,13 +25,26 @@ var ESupportedOptimizationExtensions = []string{
 }
 
 type Optimization struct {
-	ID         uint      `gorm:"primarykey" json:"id"`
-	ProjectID  uint      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id"`
-	Title      string    `json:"title"`
-	Extensions string    `json:"extensions"` // расширения в виде "png|webp|avif" или "png"
-	Sizes      string    `json:"sizes"`      // размеры в процентах: для "25|50|75" будут созданы 3 версии изображения; каждое из указанных чисел не может быть меньше MinOptimizationPercent и больше MaxOptimizationPercent
-	CreatedAt  time.Time `json:"created_at,omitzero"`
-	UpdatedAt  time.Time `json:"updated_at,omitzero"`
+	ID             uint           `gorm:"primarykey" json:"id"`
+	ProjectID      uint           `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"project_id"`
+	Title          string         `json:"title"`
+	Extensions     string         `json:"extensions"` // расширения в виде "png|webp|avif" или "png"
+	Sizes          string         `json:"sizes"`      // размеры в процентах: для "25|50|75" будут созданы 3 версии изображения; каждое из указанных чисел не может быть меньше MinOptimizationPercent и больше MaxOptimizationPercent
+	ProgressStatus ProgressStatus `json:"progress_status"`
+	CreatedAt      time.Time      `json:"created_at,omitzero"`
+	UpdatedAt      time.Time      `json:"updated_at,omitzero"`
+}
+
+func (o *Optimization) GetID() uint {
+	return o.ID
+}
+
+func (o *Optimization) SetProgressStatus(ps ProgressStatus) {
+	o.ProgressStatus = ps
+	err := gormDb.Save(o)
+	if err != nil {
+		log.Printf("Could not save progress status %v for optimization%v: %v\n", ps, o.Title, err)
+	}
 }
 
 // получить []string из строки вида "avif|jpeg|png": []string{"avif", "jpeg", "png"}
@@ -142,7 +155,6 @@ func (o *Optimization) Start() {
 	// файлы оптмизированы: сформировать архив
 	zipPath := path.Join(optPath, o.Title+".zip")
 	err = ZipDir(archiveDir, zipPath)
-	OptimizationsProgressStorage.FinishProgress(progress)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", o.Title, err)
@@ -166,7 +178,7 @@ func (o *Optimization) CreateDirFatal(rootPath, dirName string) string {
 	return outputDir
 }
 
-func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Project) *Progress[TOptimizationProgressStorageMeta] {
+func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Project) *Progress {
 	imagesCount, err := gorm.G[Image](gormDb).Where(`folder_id IN (
 		SELECT id FROM folders WHERE project_id = ?
 	)`, project.ID).Count(ctx, "id")
@@ -176,5 +188,5 @@ func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Proj
 
 	// imagesCount + операция по созданию архива
 	total := uint(imagesCount + 1)
-	return OptimizationsProgressStorage.NewProgress(o.ID, project.UploaderID, total)
+	return OptimizationsProgressStorage.NewProgress(o, project.UploaderID, total, nil)
 }

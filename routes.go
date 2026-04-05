@@ -60,11 +60,21 @@ func RouteNewProject(c *gin.Context) {
 		title = ToAcceptablePathName(GetCurrentFormattedTime())
 	}
 
+	existingProject, err := gorm.G[Project](gormDb).Where("title = ?", title).First(ctx)
+	if existingProject.Title == title && !errors.Is(err, gorm.ErrRecordNotFound) {
+		RespondError(c, Response{
+			Error: ErrUnprocessableEntity(
+				fmt.Sprintf("Project %v already exists", existingProject.Title),
+				nil),
+		})
+		return
+	}
+
 	project := Project{
 		UploaderID: uploader.ID,
 		Title:      title,
 	}
-	err := gorm.G[Project](gormDb).Create(ctx, &project)
+	err = gorm.G[Project](gormDb).Create(ctx, &project)
 
 	if err != nil {
 		RespondError(c, Response{
@@ -580,10 +590,11 @@ func RouteStartOptimization(c *gin.Context) {
 	}
 
 	opt := Optimization{
-		ProjectID:  project.ID,
-		Title:      title,
-		Extensions: extensionsString,
-		Sizes:      sizesString,
+		ProjectID:      project.ID,
+		Title:          title,
+		Extensions:     extensionsString,
+		Sizes:          sizesString,
+		ProgressStatus: ProgressCreated,
 	}
 
 	err = gorm.G[Optimization](gormDb).Create(ctx, &opt)
@@ -658,18 +669,6 @@ func RouteDownloadOptimization(c *gin.Context) {
 
 // progress
 
-func RouteProgressSync(c *gin.Context) {
-	uploader := c.MustGet("uploader").(Uploader)
-
-	list := make(TProgressSyncActionsList)
-	ProgressStorageToList(list, uploader.ID, &OptimizationsProgressStorage)
-	ProgressStorageToList(list, uploader.ID, &UploadsProgressStorage)
-
-	RespondOk(c, Response{
-		Data: list,
-	})
-}
-
 func RouteOptimizationProgress(c *gin.Context) {
 	optimization := c.MustGet("optimization").(Optimization)
 
@@ -707,7 +706,56 @@ func RouteOptimizationProgress(c *gin.Context) {
 
 	c.Stream(func(w io.Writer) bool {
 		if value, ok := <-clientChannel; ok {
-			c.SSEvent("message", value)
+			c.SSEvent("message", TProgressSSE{
+				Value: value,
+			})
+			return value < 100
+		}
+		return false
+	})
+}
+
+func RouteUploadProgress(c *gin.Context) {
+	folder := c.MustGet("folder").(Folder)
+
+	progress, err := UploadsProgressStorage.GetProgress(folder.ID)
+	if err != nil {
+		RespondError(c, Response{
+			Error: ErrUnprocessableEntity("Upload is not in progress", err),
+		})
+		return
+	}
+
+	clientChannel := make(ProgressClientChan)
+
+	select {
+	case progress.Stream.NewClients <- clientChannel:
+	case <-c.Request.Context().Done():
+	case <-time.After(2 * time.Second):
+		RespondError(c, Response{
+			Error: ErrGatewayTimeout("", nil),
+		})
+		return
+	}
+
+	go func() {
+		<-c.Request.Context().Done()
+
+		for range clientChannel {
+		}
+
+		select {
+		case progress.Stream.ClosedClients <- clientChannel:
+		default:
+		}
+	}()
+
+	c.Stream(func(w io.Writer) bool {
+		if value, ok := <-clientChannel; ok {
+			c.SSEvent("message", TProgressSSE{
+				Value:   value,
+				Details: progress.Details,
+			})
 			return value < 100
 		}
 		return false
