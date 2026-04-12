@@ -183,6 +183,12 @@ func SSEStream(c *gin.Context, progress *Progress) {
 		}
 	}()
 
+	c.SSEvent("message", TProgressSSE{
+		Value:   math.Round(progress.GetPercent()*100) / 100,
+		Details: progress.Details,
+	})
+	c.Writer.Flush()
+
 	c.Stream(func(w io.Writer) bool {
 		if value, ok := <-clientChannel; ok {
 			c.SSEvent("message", TProgressSSE{
