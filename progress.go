@@ -6,11 +6,25 @@ import (
 	"sync"
 )
 
+// формат данных для отправки по SSE
 type TProgressSSE struct {
-	Value   float64
-	Details TProgressDetails
+	Value   float64          `json:"value"`
+	Details TProgressDetails `json:"details"`
 }
 
+// список элементов прогресса. Например, для "uploads" - изображения, то есть ключами являются названия изображений
+type TProgressDetails map[string]TProgressDetailItem
+
+type TProgressDetailItem struct {
+	// ошибка записывается в это поле
+	Error error `json:"error,omitzero"`
+	// завершены ли действия по обработке элемента. Если error != nil - всегда будет false
+	Done bool `json:"done"`
+	// дополнительные данные
+	Meta map[string]any `json:"meta,omitzero"`
+}
+
+// статус прогресса для хранения у сущности в базе
 type ProgressStatus int
 
 const (
@@ -19,18 +33,15 @@ const (
 	ProgressDone
 )
 
+// сущность прогресса: таблица в базе данных
 type IProgressStatusEntity interface {
 	GetID() uint
+	// изменяет статус прогресса сущности, обновляя запись в бд
 	SetProgressStatus(ps ProgressStatus)
 }
 
-type TProgressDetails map[string]TProgressDetailItem
-
-type TProgressDetailItem struct {
-	Error error          `json:"error,omitzero"`
-	Done  bool           `json:"done"`
-	Meta  map[string]any `json:"meta,omitzero"`
-}
+// Progress содержит в себе инициализированный прогресс. Он должен быть привязан к TProgressesStorage
+// все действия с прогрессом (инициализация, увеличение, завершение) осуществляются через TProgressesStorage, в котором он зарегистрирован
 
 type Progress struct {
 	UploaderID uint
@@ -56,11 +67,15 @@ func (p *Progress) Increment() {
 	p.StreamProgressPercent()
 }
 
-func (p *Progress) IncrementWithDetails(detailKey string, detailValue TProgressDetailItem) {
+func (p *Progress) IncrementWithDetails(detailKey string, detailErr error, detailMeta map[string]any) {
 	p.mu.Lock()
 
+	detailValue := TProgressDetailItem{
+		Error: detailErr,
+		Meta:  detailMeta,
+	}
 	p.completed += 1
-	if detailValue.Error == nil {
+	if detailErr == nil {
 		detailValue.Done = true
 	}
 	p.Details[detailKey] = detailValue
@@ -98,17 +113,19 @@ func (p *Progress) GetPercent() float64 {
 	return float64(p.completed) / total * 100
 }
 
+// TProgressesStorage
+
 type TProgressesStorage struct {
 	Name       string
 	mu         sync.RWMutex
 	progresses []*Progress
 }
 
-// если у данного entity ещё нет прогресса, создаст новый, записав туда total и details
+// если у данного entity ещё нет прогресса, создаст новый, записав туда total и details, а также изменит статус прогресса [entity] на [ProgressPending]
 //
 // если у данного entity прогресс уже зарегистрирован - вернёт его, прибавив total и прибавив details.
 //
-// все дальнейшие действия с прогрессом должны идти через методы TProgressesStorage (Increment)
+// все дальнейшие действия с прогрессом должны идти через методы TProgressesStorage, то есть не нужно изменять Progress напрямую
 //
 // прогресс будет завершён автоматически при достижении total == completed (при условии увеличения через методы [TProgressesStorage.Increment], [TProgressesStorage.IncrementWithDetails])
 func (ps *TProgressesStorage) NewProgress(entity IProgressStatusEntity, uploaderID, total uint, details TProgressDetails) *Progress {
@@ -117,7 +134,7 @@ func (ps *TProgressesStorage) NewProgress(entity IProgressStatusEntity, uploader
 
 	p, err := ps.getProgressUnlocked(entity.GetID())
 	entity.SetProgressStatus(ProgressPending)
-	if err == nil {
+	if err != nil {
 		p = &Progress{
 			UploaderID: uploaderID,
 			Entity:     entity,
@@ -171,21 +188,22 @@ func (ps *TProgressesStorage) Increment(p *Progress) {
 	ps.afterIncrement(p)
 }
 
-func (ps *TProgressesStorage) IncrementWithDetails(p *Progress, detailKey string, detailValue TProgressDetailItem) {
-	p.IncrementWithDetails(detailKey, detailValue)
+func (ps *TProgressesStorage) IncrementWithDetails(p *Progress, detailKey string, detailErr error, detailMeta map[string]any) {
+	p.IncrementWithDetails(detailKey, detailErr, detailMeta)
 	ps.afterIncrement(p)
 }
 
 func (ps *TProgressesStorage) afterIncrement(p *Progress) {
-	if p.completed == p.total {
+	if p.completed >= p.total {
 		ps.Finish(p)
 	}
 }
 
-// завершает прогресс и удаляет его из хранилища
+// завершает прогресс и удаляет его из хранилища. Изменяет статус прогресса [entity] на [ProgressDone]
 func (ps *TProgressesStorage) Finish(p *Progress) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
 	p.Finish()
 	p.Entity.SetProgressStatus(ProgressDone)
 	ps.progresses = FilterSlice(ps.progresses, func(index int, item *Progress, slice []*Progress) bool {
@@ -218,12 +236,15 @@ func (ps *ProgressStream) listen() {
 
 	for {
 		select {
+		// клиент подключился
 		case client := <-ps.NewClients:
 			ps.TotalClients[client] = true
 
+		// клиент отключился
 		case client := <-ps.ClosedClients:
 			delete(ps.TotalClients, client)
 
+		// отправка данных клиенту
 		case value, ok := <-ps.Value:
 			if !ok {
 				return

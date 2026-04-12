@@ -3,14 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -680,39 +678,7 @@ func RouteOptimizationProgress(c *gin.Context) {
 		return
 	}
 
-	clientChannel := make(ProgressClientChan)
-
-	select {
-	case progress.Stream.NewClients <- clientChannel:
-	case <-c.Request.Context().Done():
-	case <-time.After(2 * time.Second):
-		RespondError(c, Response{
-			Error: ErrGatewayTimeout("", nil),
-		})
-		return
-	}
-
-	go func() {
-		<-c.Request.Context().Done()
-
-		for range clientChannel {
-		}
-
-		select {
-		case progress.Stream.ClosedClients <- clientChannel:
-		default:
-		}
-	}()
-
-	c.Stream(func(w io.Writer) bool {
-		if value, ok := <-clientChannel; ok {
-			c.SSEvent("message", TProgressSSE{
-				Value: value,
-			})
-			return value < 100
-		}
-		return false
-	})
+	SSEStream(c, progress)
 }
 
 func RouteUploadProgress(c *gin.Context) {
@@ -726,38 +692,5 @@ func RouteUploadProgress(c *gin.Context) {
 		return
 	}
 
-	clientChannel := make(ProgressClientChan)
-
-	select {
-	case progress.Stream.NewClients <- clientChannel:
-	case <-c.Request.Context().Done():
-	case <-time.After(2 * time.Second):
-		RespondError(c, Response{
-			Error: ErrGatewayTimeout("", nil),
-		})
-		return
-	}
-
-	go func() {
-		<-c.Request.Context().Done()
-
-		for range clientChannel {
-		}
-
-		select {
-		case progress.Stream.ClosedClients <- clientChannel:
-		default:
-		}
-	}()
-
-	c.Stream(func(w io.Writer) bool {
-		if value, ok := <-clientChannel; ok {
-			c.SSEvent("message", TProgressSSE{
-				Value:   value,
-				Details: progress.Details,
-			})
-			return value < 100
-		}
-		return false
-	})
+	SSEStream(c, progress)
 }

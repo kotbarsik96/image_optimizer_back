@@ -34,10 +34,7 @@ func (f *Folder) GetID() uint {
 
 func (f *Folder) SetProgressStatus(ps ProgressStatus) {
 	f.ProgressStatus = ps
-	err := gormDb.Save(f)
-	if err != nil {
-		log.Printf("Could not save progress status %v for folder %v: %v\n", ps, f.Path, err)
-	}
+	gormDb.Save(f)
 }
 
 func (folder *Folder) GetNested(ctx context.Context) ([]Folder, error) {

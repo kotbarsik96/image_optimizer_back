@@ -4,12 +4,15 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 var acceptablePathNameRegexp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
@@ -153,4 +156,41 @@ func ToSupportedExtension(ext string) (fixedExt string, err error) {
 	}
 
 	return ext, nil
+}
+
+func SSEStream(c *gin.Context, progress *Progress) {
+	clientChannel := make(ProgressClientChan)
+
+	select {
+	case progress.Stream.NewClients <- clientChannel:
+	case <-c.Request.Context().Done():
+	case <-time.After(2 * time.Second):
+		RespondError(c, Response{
+			Error: ErrGatewayTimeout("", nil),
+		})
+		return
+	}
+
+	go func() {
+		<-c.Request.Context().Done()
+
+		for range clientChannel {
+		}
+
+		select {
+		case progress.Stream.ClosedClients <- clientChannel:
+		default:
+		}
+	}()
+
+	c.Stream(func(w io.Writer) bool {
+		if value, ok := <-clientChannel; ok {
+			c.SSEvent("message", TProgressSSE{
+				Value:   math.Round(value*100) / 100,
+				Details: progress.Details,
+			})
+			return value < 100
+		}
+		return false
+	})
 }

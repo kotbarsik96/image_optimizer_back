@@ -41,10 +41,7 @@ func (o *Optimization) GetID() uint {
 
 func (o *Optimization) SetProgressStatus(ps ProgressStatus) {
 	o.ProgressStatus = ps
-	err := gormDb.Save(o)
-	if err != nil {
-		log.Printf("Could not save progress status %v for optimization%v: %v\n", ps, o.Title, err)
-	}
+	gormDb.Save(o)
 }
 
 // получить []string из строки вида "avif|jpeg|png": []string{"avif", "jpeg", "png"}
@@ -155,6 +152,7 @@ func (o *Optimization) Start() {
 	// файлы оптмизированы: сформировать архив
 	zipPath := path.Join(optPath, o.Title+".zip")
 	err = ZipDir(archiveDir, zipPath)
+	OptimizationsProgressStorage.Increment(progress)
 
 	if err != nil {
 		log.Printf("Could not create zip archive for optimization %v: %v", o.Title, err)
@@ -163,10 +161,7 @@ func (o *Optimization) Start() {
 	}
 
 	// удаление /temp
-	err = os.RemoveAll(tempDir)
-	if err != nil {
-		log.Printf("Could not remove temporary dir %v: %v", optPath, err)
-	}
+	o.RemoveTempDir(optPath, tempDir)
 }
 
 func (o *Optimization) CreateDirFatal(rootPath, dirName string) string {
@@ -189,4 +184,16 @@ func (o *Optimization) NewOptimizationProgress(ctx context.Context, project Proj
 	// imagesCount + операция по созданию архива
 	total := uint(imagesCount + 1)
 	return OptimizationsProgressStorage.NewProgress(o, project.UploaderID, total, nil)
+}
+
+func (o *Optimization) RemoveTempDir(optPath, tempDir string) {
+	err := os.RemoveAll(tempDir)
+	if err != nil {
+		time.Sleep(time.Second * 20)
+		err = os.RemoveAll(tempDir)
+
+		if err != nil {
+			log.Printf("Could not remove temporary dir %v: %v", optPath, err)
+		}
+	}
 }
