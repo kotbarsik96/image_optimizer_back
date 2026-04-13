@@ -708,8 +708,6 @@ func RouteUploadProgresses(c *gin.Context) {
 		for _, p := range progresses {
 			ProgressSubscriptions.Unsubscribe(p, inbox)
 		}
-
-		close(inbox)
 	}()
 
 	c.Stream(func(w io.Writer) bool {
