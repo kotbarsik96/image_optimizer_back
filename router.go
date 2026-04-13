@@ -81,7 +81,7 @@ func ListRoutes() {
 
 	progress := router.Group("/progress", AuthMiddleware(), SSEHeadersMiddleware())
 	{
-		progress.GET("/optimizations/:optimization_id", OptimizationAuthMiddleware(), RouteOptimizationProgress)
-		progress.GET("/uploads/:folder_id", ProjectFolderAuthMiddleware(), RouteUploadProgress)
+		progress.GET("/optimizations", RouteOptimizationProgresses)
+		progress.GET("/uploads", RouteUploadProgresses)
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -667,30 +668,55 @@ func RouteDownloadOptimization(c *gin.Context) {
 
 // progress
 
-func RouteOptimizationProgress(c *gin.Context) {
-	optimization := c.MustGet("optimization").(Optimization)
+func RouteOptimizationProgresses(c *gin.Context) {
 
-	progress, err := OptimizationsProgressStorage.GetProgress(optimization.ID)
-	if err != nil {
-		RespondError(c, Response{
-			Error: ErrUnprocessableEntity("Optimization is not in progress", err),
-		})
-		return
-	}
+	// progress, err := OptimizationsProgressStorage.GetProgress(optimization.ID)
+	// if err != nil {
+	// 	RespondError(c, Response{
+	// 		Error: ErrUnprocessableEntity("Optimization is not in progress", err),
+	// 	})
+	// 	return
+	// }
 
-	SSEStream(c, progress)
+	// SSEStream(c, progress)
 }
 
-func RouteUploadProgress(c *gin.Context) {
-	folder := c.MustGet("folder").(Folder)
+func RouteUploadProgresses(c *gin.Context) {
+	uploader := c.MustGet("uploader").(Uploader)
 
-	progress, err := UploadsProgressStorage.GetProgress(folder.ID)
-	if err != nil {
+	inbox := make(TProgressClientChan, 10)
+
+	progresses := UploadsProgressStorage.GetListByUploader(uploader.ID)
+
+	if len(progresses) < 1 {
 		RespondError(c, Response{
-			Error: ErrUnprocessableEntity("Upload is not in progress", err),
+			Error: ErrNotFound("No uploads in progress", nil),
 		})
 		return
 	}
 
-	SSEStream(c, progress)
+	for _, p := range progresses {
+		ProgressSubscriptions.Subscribe(p, inbox)
+	}
+
+	go func() {
+		<-c.Request.Context().Done()
+
+		for range inbox {
+		}
+
+		for _, p := range progresses {
+			ProgressSubscriptions.Unsubscribe(p, inbox)
+		}
+
+		close(inbox)
+	}()
+
+	c.Stream(func(w io.Writer) bool {
+		if value, ok := <-inbox; ok {
+			c.SSEvent("message", value)
+			return true
+		}
+		return false
+	})
 }

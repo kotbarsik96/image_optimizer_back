@@ -58,12 +58,12 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 	}
 
 	totalCount := uint(len(details))
-	progress := UploadsProgressStorage.NewProgress(&folder, u.ID, totalCount, details)
+	progress := UploadsProgressStorage.NewProgress(u.ID, &folder, totalCount, details)
 
 	fileStorage := Storages[folder.Storage]
 	for i, img := range images {
 		if details[img.Filename].Error != nil {
-			UploadsProgressStorage.Increment(progress)
+			progress.Increment()
 			continue
 		}
 
@@ -76,7 +76,7 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 
 		meta := details[img.Filename].Meta
 		meta["image"] = img
-		UploadsProgressStorage.IncrementWithDetails(progress, img.Filename, err, meta)
+		progress.IncrementWithDetails(img.Filename, err, meta)
 
 		time.Sleep(2 * time.Second) //temp
 	}
