@@ -74,7 +74,9 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 			err = gorm.G[Image](gormDb).Create(ctx, img)
 		}
 
-		UploadsProgressStorage.IncrementWithDetails(progress, img.Filename, err, nil)
+		meta := details[img.Filename].Meta
+		meta["image"] = img
+		UploadsProgressStorage.IncrementWithDetails(progress, img.Filename, err, meta)
 
 		time.Sleep(2 * time.Second) //temp
 	}
