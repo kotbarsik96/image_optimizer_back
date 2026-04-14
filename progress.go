@@ -59,11 +59,11 @@ func (p *TProgress) Increment() {
 
 	if !p.Done() {
 		p.completed += 1
+
+		p.AfterIncrement()
 	}
 
 	p.mu.Unlock()
-
-	ProgressSubscriptions.Broadcast(p)
 }
 
 func (p *TProgress) IncrementWithDetails(detailKey string, detailErr error, detailMeta map[string]any) {
@@ -80,10 +80,14 @@ func (p *TProgress) IncrementWithDetails(detailKey string, detailErr error, deta
 
 		p.Details[detailKey] = detailValue
 		p.completed += 1
+
+		p.AfterIncrement()
 	}
 
 	p.mu.Unlock()
+}
 
+func (p *TProgress) AfterIncrement() {
 	ProgressSubscriptions.Broadcast(p)
 }
 
@@ -136,13 +140,16 @@ func (ps *TProgressSubscriptions) subscribeUnlocked(progress *TProgress, inbox T
 func (ps *TProgressSubscriptions) unsubscribeUnlocked(progress *TProgress, inbox TProgressClientChan) {
 	if _, ok := ps.Clients[progress]; ok {
 		delete(ps.Clients[progress], inbox)
-		close(inbox)
-	}
-	if len(ps.Clients[progress]) < 1 {
-		delete(ps.Clients, progress)
+
+		if len(ps.Clients[progress]) < 1 {
+			delete(ps.Clients, progress)
+		}
 	}
 }
 
+// отправляет обновлённое значение прогресса подписавшимся слушателям
+//
+// при достижении progress.Done() отписывает слушателя (inbox) и выставляет progress.Entity статус ProgressDone
 func (ps *TProgressSubscriptions) Broadcast(progress *TProgress) {
 	ps.mu.Lock()
 
@@ -164,18 +171,18 @@ func (ps *TProgressSubscriptions) Broadcast(progress *TProgress) {
 	ps.mu.Unlock()
 }
 
-// когда стартует новый прогресс - подписать подходящие inbox'ы на него
-func (ps *TProgressSubscriptions) SubscribeToNewProgress(uploaderID uint, progress *TProgress) {
+// когда стартует новый прогресс - подписать подходящие inbox'ы на него - синхронизировать уже подключившихся ранее слушателей
+func (ps *TProgressSubscriptions) SubscribeToNewProgress(uploaderID uint, newProgress *TProgress) {
 	ps.mu.Lock()
 
-	for p, inboxes := range ps.Clients {
-		if p.UploaderID == uploaderID {
-			if p.GetID() == progress.GetID() {
+	for oldProgress, inboxes := range ps.Clients {
+		if oldProgress.UploaderID == uploaderID {
+			if oldProgress.GetID() == newProgress.GetID() {
 				continue
 			}
 
 			for inbox := range inboxes {
-				ps.subscribeUnlocked(p, inbox)
+				ps.subscribeUnlocked(newProgress, inbox)
 			}
 		}
 	}
@@ -198,6 +205,11 @@ func (ps *TProgressesStorage) GetListByUploader(uploaderID uint) []*TProgress {
 	})
 }
 
+// регистрация нового прогресса:
+//
+// если не зарегистрирован - создаст новый, добавит его в List и начнёт отслеживать его: по достижению progress.Done() == true прогресс будет удалён из List
+//
+// если уже зарегистрирован - добавит к существующему total и details
 func (ps *TProgressesStorage) NewProgress(uploaderID uint, entity IProgressEntity, total uint, details TProgressDetails) *TProgress {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -217,13 +229,54 @@ func (ps *TProgressesStorage) NewProgress(uploaderID uint, entity IProgressEntit
 			total:      total,
 		}
 
+		ps.List = append(ps.List, progress)
+
+		// подписать подходящие inbox'ы на этот прогресс: синхронизировать с уже подключёнными клиентами
 		ProgressSubscriptions.SubscribeToNewProgress(uploaderID, progress)
+
+		// отслеживать прогресс, чтобы убрать его из List по достижению progress.Done() == true
+		inbox := make(TProgressClientChan, 1)
+		ProgressSubscriptions.Subscribe(progress, inbox)
+		go func() {
+			for {
+				// пока прогресс не завершён - цикл продолжается
+				if _, ok := <-inbox; ok {
+					if !progress.Done() {
+						continue
+					}
+				}
+
+				// прогресс завершён:
+
+				// отписка inbox'а произойдёт автоматически - остаётся только удалить progress из List
+				ps.RemoveProgress(progress)
+				return
+			}
+		}()
 	} else {
 		progress.total += total
 		maps.Copy(progress.Details, details)
 	}
 
 	return progress
+}
+
+// удалить прогресс из List. Должен вызываться только после того, как прогресс завершился (progress.Done() == true) - иначе завершит прогресс "рвано"
+func (ps *TProgressesStorage) RemoveProgress(progress *TProgress) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	// если прогресс не завершён - завершить его, что автоматически проивзедёт очистку слушателей
+	for {
+		if progress.Done() {
+			break
+		}
+		progress.Increment()
+	}
+
+	ps.List = FilterSlice(ps.List, func(index int, item *TProgress, slice []*TProgress) bool {
+		return item.GetID() != progress.GetID()
+	})
 }
 
 var OptimizationsProgressStorage TProgressesStorage = TProgressesStorage{
