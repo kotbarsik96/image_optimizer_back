@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+const SSE_STREAM_CLOSED = "stream_closed"
+
 // список элементов прогресса. Например, для "uploads" - изображения, то есть ключами являются названия изображений
 type TProgressDetails map[string]TProgressDetailItem
 
@@ -29,6 +31,7 @@ const (
 // сущность прогресса: таблица в базе данных
 type IProgressEntity interface {
 	GetID() uint
+	GetProgressStatus() ProgressStatus
 	// изменяет статус прогресса сущности, обновляя запись в бд
 	SetProgressStatus(ps ProgressStatus)
 }
@@ -88,6 +91,9 @@ func (p *TProgress) IncrementWithDetails(detailKey string, detailErr error, deta
 }
 
 func (p *TProgress) AfterIncrement() {
+	if p.Done() {
+		p.Entity.SetProgressStatus(ProgressDone)
+	}
 	ProgressSubscriptions.Broadcast(p)
 }
 
@@ -96,6 +102,7 @@ func (p *TProgress) GetData() TProgressSSE {
 		EntityID: p.GetID(),
 		Value:    p.GetPercent(),
 		Details:  p.Details,
+		Done:     p.Done(),
 	}
 }
 
@@ -106,8 +113,9 @@ func (p *TProgress) Done() bool {
 // формат данных для отправки по SSE
 type TProgressSSE struct {
 	EntityID uint             `json:"entity_id"`
-	Value    float64          `json:"value"`
+	Value    float64          `json:"progress_value"`
 	Details  TProgressDetails `json:"details"`
+	Done     bool             `json:"done"`
 }
 
 type TProgressClientChan chan TProgressSSE
@@ -160,12 +168,12 @@ func (ps *TProgressSubscriptions) Broadcast(progress *TProgress) {
 
 			if progress.Done() {
 				ps.unsubscribeUnlocked(progress, inbox)
+
+				if !ps.InboxHasListeners(inbox) {
+					close(inbox)
+				}
 			}
 		}
-	}
-
-	if progress.Done() {
-		progress.Entity.SetProgressStatus(ProgressDone)
 	}
 
 	ps.mu.Unlock()
@@ -188,6 +196,17 @@ func (ps *TProgressSubscriptions) SubscribeToNewProgress(uploaderID uint, newPro
 	}
 
 	ps.mu.Unlock()
+}
+
+// возвращает true, если inbox на что-либо подписан
+func (ps *TProgressSubscriptions) InboxHasListeners(inbox TProgressClientChan) bool {
+	var has bool
+	for _, inboxes := range ps.Clients {
+		if _, ok := inboxes[inbox]; ok {
+			has = true
+		}
+	}
+	return has
 }
 
 var ProgressSubscriptions TProgressSubscriptions = TProgressSubscriptions{
@@ -213,6 +232,8 @@ func (ps *TProgressesStorage) GetListByUploader(uploaderID uint) []*TProgress {
 func (ps *TProgressesStorage) NewProgress(uploaderID uint, entity IProgressEntity, total uint, details TProgressDetails) *TProgress {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	entity.SetProgressStatus(ProgressPending)
 
 	var progress *TProgress
 	for _, p := range ps.List {

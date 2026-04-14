@@ -32,6 +32,10 @@ func (f *Folder) GetID() uint {
 	return f.ID
 }
 
+func (f *Folder) GetProgressStatus() ProgressStatus {
+	return f.ProgressStatus
+}
+
 func (f *Folder) SetProgressStatus(ps ProgressStatus) {
 	f.ProgressStatus = ps
 	gormDb.Save(f)

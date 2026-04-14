@@ -33,9 +33,8 @@ func (u *Uploader) GetOptimizationsPath() string {
 	return path.Join(u.GetFolderPath(), "optimizations")
 }
 
-func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) error {
-	ctx := context.Background()
-
+// инициализирует прогресс и запускает отдельную горутину для загрузки файлов
+func (u *Uploader) StartUploadingFiles(folder Folder, files []*multipart.FileHeader, ctx context.Context) error {
 	project, err := gorm.G[Project](gormDb).Where("id = ?", folder.ProjectID).First(ctx)
 	if err != nil {
 		return err
@@ -60,26 +59,28 @@ func (u *Uploader) UploadFiles(folder Folder, files []*multipart.FileHeader) err
 	totalCount := uint(len(details))
 	progress := UploadsProgressStorage.NewProgress(u.ID, &folder, totalCount, details)
 
-	fileStorage := Storages[folder.Storage]
-	for i, img := range images {
-		if details[img.Filename].Error != nil {
-			progress.Increment()
-			continue
+	go func() {
+		ctx := context.Background()
+
+		fileStorage := Storages[folder.Storage]
+		for i, img := range images {
+			if details[img.Filename].Error != nil {
+				progress.Increment()
+				continue
+			}
+
+			imgPath := path.Join(img.StoragePath, img.OriginalFilename+"."+img.Extension)
+
+			err = fileStorage.PutImage(ctx, imgPath, files[i])
+			if err == nil {
+				err = gorm.G[Image](gormDb).Create(ctx, img)
+			}
+
+			meta := details[img.Filename].Meta
+			meta["image"] = img
+			progress.IncrementWithDetails(img.Filename, err, meta)
 		}
-
-		imgPath := path.Join(img.StoragePath, img.OriginalFilename+"."+img.Extension)
-
-		err = fileStorage.PutImage(ctx, imgPath, files[i])
-		if err == nil {
-			err = gorm.G[Image](gormDb).Create(ctx, img)
-		}
-
-		meta := details[img.Filename].Meta
-		meta["image"] = img
-		progress.IncrementWithDetails(img.Filename, err, meta)
-
-		time.Sleep(2 * time.Second) //temp
-	}
+	}()
 
 	return nil
 }

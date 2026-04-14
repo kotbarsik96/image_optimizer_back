@@ -39,6 +39,10 @@ func (o *Optimization) GetID() uint {
 	return o.ID
 }
 
+func (o *Optimization) GetProgressStatus() ProgressStatus {
+	return o.ProgressStatus
+}
+
 func (o *Optimization) SetProgressStatus(ps ProgressStatus) {
 	o.ProgressStatus = ps
 	gormDb.Save(o)

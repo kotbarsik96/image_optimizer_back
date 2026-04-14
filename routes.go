@@ -98,7 +98,7 @@ func RouteNewProject(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err == nil {
 		imageFiles := form.File["images"]
-		go uploader.UploadFiles(folder, imageFiles)
+		uploader.StartUploadingFiles(folder, imageFiles, ctx)
 	}
 
 	RespondCreated(c, Response{
@@ -316,6 +316,8 @@ func RouteDeleteFolder(c *gin.Context) {
 }
 
 func RouteUploadFiles(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	uploader := c.MustGet("uploader").(Uploader)
 	folder := c.MustGet("folder").(Folder)
 
@@ -329,7 +331,7 @@ func RouteUploadFiles(c *gin.Context) {
 
 	imageFiles := form.File["images"]
 
-	go uploader.UploadFiles(folder, imageFiles)
+	uploader.StartUploadingFiles(folder, imageFiles, ctx)
 
 	RespondCreated(c, Response{
 		Data: gin.H{
@@ -714,14 +716,20 @@ func RouteUploadProgresses(c *gin.Context) {
 		for _, p := range progresses {
 			ProgressSubscriptions.Unsubscribe(p, inbox)
 		}
-		close(inbox)
 	}()
 
 	c.Stream(func(w io.Writer) bool {
-		if value, ok := <-inbox; ok {
-			c.SSEvent("message", value)
-			return true
+		select {
+		case value, ok := <-inbox:
+			if ok {
+				c.SSEvent("message", value)
+				return true
+			}
+
+		case <-c.Request.Context().Done():
 		}
+
+		c.SSEvent("message", SSE_STREAM_CLOSED)
 		return false
 	})
 }
