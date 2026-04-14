@@ -2,6 +2,7 @@ package main
 
 import (
 	"maps"
+	"math"
 	"sync"
 )
 
@@ -54,7 +55,8 @@ func (p *TProgress) GetPercent() float64 {
 	if total == 0 {
 		return 0
 	}
-	return float64(p.completed) / total * 100
+	percent := float64(p.completed) / total * 100
+	return math.Floor(percent*100) / 100
 }
 
 func (p *TProgress) Increment() {
@@ -277,6 +279,8 @@ func (ps *TProgressesStorage) NewProgress(uploaderID uint, entity IProgressEntit
 	} else {
 		progress.total += total
 		maps.Copy(progress.Details, details)
+
+		ProgressSubscriptions.Broadcast(progress)
 	}
 
 	return progress

@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 var acceptablePathNameRegexp = regexp.MustCompile(`^[\pL\pM\pN._ -]+$`)
@@ -153,4 +155,44 @@ func ToSupportedExtension(ext string) (fixedExt string, err error) {
 	}
 
 	return ext, nil
+}
+
+func StreamSSE(uploader Uploader, progresses []*TProgress, c *gin.Context) {
+	inbox := make(TProgressClientChan, 10)
+
+	for _, p := range progresses {
+		ProgressSubscriptions.Subscribe(p, inbox)
+	}
+
+	go func() {
+		// пользователь отсоединился
+		<-c.Request.Context().Done()
+
+		// опустошить inbox
+		for range inbox {
+		}
+
+		// обновить список: он мог дополниться при создании новых прогрессов либо какие-то прогрессы уже завершены (при завершении прогресса inbox отписывается от него автоматически, поэтому здесь остаётся отписать inbox только от текущих активных прогрессов)
+		progresses = UploadsProgressStorage.GetListByUploader(uploader.ID)
+
+		// отписать inbox от всех прогрессов и закрыть его
+		for _, p := range progresses {
+			ProgressSubscriptions.Unsubscribe(p, inbox)
+		}
+	}()
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case value, ok := <-inbox:
+			if ok {
+				c.SSEvent("message", value)
+				return true
+			}
+
+		case <-c.Request.Context().Done():
+		}
+
+		c.SSEvent("message", SSE_STREAM_CLOSED)
+		return false
+	})
 }

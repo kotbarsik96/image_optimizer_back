@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path"
@@ -655,6 +654,13 @@ func RouteDownloadOptimization(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
 	optimization := c.MustGet("optimization").(Optimization)
 
+	if optimization.ProgressStatus == ProgressPending {
+		RespondError(c, Response{
+			Error: ErrBadRequest("Optimization not ready yet", nil),
+		})
+		return
+	}
+
 	storageLocal := Storages[EStorageLocal].(StorageLocal)
 	zipFilepath := path.Join(storageLocal.RootPath, uploader.GetOptimizationsPath(), optimization.Title, optimization.Title+".zip")
 	_, err := os.Stat(zipFilepath)
@@ -671,22 +677,22 @@ func RouteDownloadOptimization(c *gin.Context) {
 // progress
 
 func RouteOptimizationProgresses(c *gin.Context) {
+	uploader := c.MustGet("uploader").(Uploader)
 
-	// progress, err := OptimizationsProgressStorage.GetProgress(optimization.ID)
-	// if err != nil {
-	// 	RespondError(c, Response{
-	// 		Error: ErrUnprocessableEntity("Optimization is not in progress", err),
-	// 	})
-	// 	return
-	// }
+	progresses := OptimizationsProgressStorage.GetListByUploader(uploader.ID)
 
-	// SSEStream(c, progress)
+	if len(progresses) < 1 {
+		RespondError(c, Response{
+			Error: ErrNotFound("No optimizations in progress", nil),
+		})
+		return
+	}
+
+	StreamSSE(uploader, progresses, c)
 }
 
 func RouteUploadProgresses(c *gin.Context) {
 	uploader := c.MustGet("uploader").(Uploader)
-
-	inbox := make(TProgressClientChan, 10)
 
 	progresses := UploadsProgressStorage.GetListByUploader(uploader.ID)
 
@@ -697,39 +703,5 @@ func RouteUploadProgresses(c *gin.Context) {
 		return
 	}
 
-	for _, p := range progresses {
-		ProgressSubscriptions.Subscribe(p, inbox)
-	}
-
-	go func() {
-		// пользователь отсоединился
-		<-c.Request.Context().Done()
-
-		// опустошить inbox
-		for range inbox {
-		}
-
-		// обновить список: он мог дополниться при создании новых прогрессов либо какие-то прогрессы уже завершены (при завершении прогресса inbox отписывается от него автоматически, поэтому здесь остаётся отписать inbox только от текущих активных прогрессов)
-		progresses = UploadsProgressStorage.GetListByUploader(uploader.ID)
-
-		// отписать inbox от всех прогрессов и закрыть его
-		for _, p := range progresses {
-			ProgressSubscriptions.Unsubscribe(p, inbox)
-		}
-	}()
-
-	c.Stream(func(w io.Writer) bool {
-		select {
-		case value, ok := <-inbox:
-			if ok {
-				c.SSEvent("message", value)
-				return true
-			}
-
-		case <-c.Request.Context().Done():
-		}
-
-		c.SSEvent("message", SSE_STREAM_CLOSED)
-		return false
-	})
+	StreamSSE(uploader, progresses, c)
 }

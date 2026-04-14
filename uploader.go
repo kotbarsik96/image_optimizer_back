@@ -57,6 +57,11 @@ func (u *Uploader) StartUploadingFiles(folder Folder, files []*multipart.FileHea
 	}
 
 	totalCount := uint(len(details))
+
+	if totalCount < 1 {
+		return nil
+	}
+
 	progress := UploadsProgressStorage.NewProgress(u.ID, &folder, totalCount, details)
 
 	go func() {
